@@ -1,0 +1,744 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>Il Tempo Gigante Grand Prix</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.8.49/Tone.js"></script>
+    <style>
+      canvas {
+        border: 2px solid black;
+        background: #f0f0f0;
+        display: none;
+        opacity: 0;
+        transition: opacity 0.5s ease-in-out;
+      }
+      canvas[style*="display: block"] {
+        opacity: 1;
+      }
+      body {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        font-family: Arial, sans-serif;
+      }
+      #score {
+        font-size: 24px;
+        margin: 10px;
+      }
+      #gameTime {
+        font-size: 24px;
+        margin: 10px;
+      }
+      #restartButton {
+        font-size: 24px;
+        padding: 10px 20px;
+        margin-top: 10px;
+        background-color: #4caf50;
+        color: white;
+        border: none;
+        border-radius: 5px;
+        cursor: pointer;
+      }
+      #restartButton:hover {
+        background-color: #45a049;
+      }
+      #scoreContainer {
+        display: flex;
+        flex-direction: row;
+        align-items: center;
+        justify-content: center;
+        width: 100%;
+        max-width: 800px;
+      }
+      #gameOverDialog {
+        display: none; /* Initially hidden */
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%); /* Center the dialog */
+        background-color: rgba(255, 0, 0, 0.8); /* Red with 80% opacity */
+        color: white;
+        padding: 50px;
+        border-radius: 10px;
+        font-size: 48px;
+        font-family: Arial, sans-serif;
+        text-align: center;
+        z-index: 10; /* Ensure it’s above the canvas */
+      }
+      #gameOverDialogContent {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        width: 680px;
+      }
+      #gameOverImage {
+        width: 180px;
+        height: 100%;
+        margin-bottom: 10px;
+      }
+      #startScreen {
+        text-align: center;
+        margin: 20px;
+        background-color: #fff; /* White background for the start screen */
+        padding: 30px;
+        border-radius: 10px;
+        box-shadow: 0 4px 10px rgba(0, 0, 0, 0.2); /* Subtle shadow */
+        max-width: 600px; /* Limit width for readability */
+      }
+      #startScreen h1 {
+        font-size: 36px;
+        color: #b8860b; /* Gold color for Il Tempo Gigante */
+        margin-bottom: 10px;
+      }
+      #startScreen p {
+        font-size: 18px;
+        color: #333;
+        margin-bottom: 20px;
+      }
+      #startButton {
+        font-size: 24px;
+        padding: 10px 20px;
+        margin: 5px;
+        background-color: #4caf50;
+        color: white;
+        border: none;
+        border-radius: 5px;
+        cursor: pointer;
+        transition: background-color 0.3s;
+      }
+      #startButton:hover {
+        background-color: #45a049;
+      }
+      #nameInput {
+        font-size: 18px;
+        padding: 10px;
+        margin-bottom: 10px;
+        width: 200px;
+        border-radius: 5px;
+        border: 1px solid #ccc;
+      }
+      #leaderboard {
+        display: flex;
+        flex-direction: row;
+        align-items: center;
+        justify-content: space-around;
+        margin-top: 20px;
+        background-color: #f9f9f9;
+        padding: 15px;
+        border-radius: 5px;
+        box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+        width: 100%;
+        max-width: 650px;
+      }
+      #leaderboard h2 {
+        font-size: 24px;
+        margin-bottom: 10px;
+        color: #b8860b;
+      }
+      #leaderboardList {
+        list-style: none;
+        padding: 0;
+      }
+      #leaderboardList li {
+        font-size: 18px;
+        padding: 5px 0;
+        border-bottom: 1px solid #ddd;
+      }
+      #leaderboardList li:last-child {
+        border-bottom: none;
+      }
+    </style>
+  </head>
+  <body>
+    <img src="image.png" alt="grand prix" width="400" height="100%" />
+    <div id="startScreen">
+      <p>
+        Use the arrow keys to drive Il Tempo Gigante. Avoid blodstrupmoen,
+        collect Aladdin Oil lamps 🧞‍♂️ to score points, and race as long as you
+        can!
+      </p>
+      <img
+        src="il-tempo-gigante.gif"
+        alt="grand prix"
+        width="600"
+        height="200"
+        style="margin-bottom: 16px"
+      />
+      <input
+        type="text"
+        id="nameInput"
+        placeholder="Enter your name"
+        aria-label="Enter your name to start the game"
+      />
+      <br />
+      <button
+        id="startButton"
+        role="button"
+        aria-label="Start the Il Tempo Gigante Grand Prix game"
+      >
+        Start Game
+      </button>
+    </div>
+    <div id="scoreContainer">
+      <div id="score">Score: 0</div>
+      <img
+        id="scoreImage"
+        src="aladdin-oil-lamp.png"
+        alt="grand prix"
+        width="60"
+        height="100%"
+        style="margin-right: 8px"
+      />
+      <div id="gameTime">| Time: 0s</div>
+    </div>
+    <div id="gameOverDialog" role="alert">
+      <img
+        id="gameOverImage"
+        src="ben-redic.png"
+        alt="Game Over"
+        width="400"
+        height="100%"
+      />
+      <div id="gameOverDialogContent">
+        <span id="gameOverText"></span>
+        <span id="gameOverScore"> </span>
+      </div>
+    </div>
+    <canvas id="gameCanvas" width="800" height="600"></canvas>
+
+    <button id="restartButton">Restart Game</button>
+    <div id="leaderboard">
+      <img
+        id="gameOverImage"
+        src="emmanuel.png"
+        alt="leaderboard"
+        width="100%"
+        height="100"
+      />
+      <div>
+        <h2>Emmanuel's Leaderboard</h2>
+        <ul id="leaderboardList"></ul>
+      </div>
+    </div>
+    <script>
+      const canvas = document.getElementById("gameCanvas");
+      const ctx = canvas.getContext("2d");
+      const scoreDisplay = document.getElementById("score");
+      const gameTimeDisplay = document.getElementById("gameTime");
+      const restartButton = document.getElementById("restartButton");
+      const gameOverDialog = document.getElementById("gameOverDialog");
+      const startScreen = document.getElementById("startScreen");
+      const startButton = document.getElementById("startButton");
+      const nameInput = document.getElementById("nameInput");
+      const showLeaderboardButton = document.getElementById(
+        "showLeaderboardButton"
+      );
+      const leaderboardDiv = document.getElementById("leaderboard");
+      const leaderboardList = document.getElementById("leaderboardList");
+
+      // Load the image of Il Tempo Gigante
+      const carImage = new Image();
+      carImage.src = "il-tempo-flame.png";
+      let imageLoaded = false;
+      carImage.onload = () => {
+        imageLoaded = true;
+      };
+
+      // Load the obstacle image
+      const obstacleImage = new Image();
+      obstacleImage.src = "blodstrupmoen.png"; // Path to your obstacle image
+      let obstacleImageLoaded = false;
+      obstacleImage.onload = () => {
+        obstacleImageLoaded = true;
+      };
+
+      // Load the collectible image
+      const collectibleImage = new Image();
+      collectibleImage.src = "aladdin-oil-lamp.png"; // Path to your collectible image
+      let collectibleImageLoaded = false;
+      collectibleImage.onload = () => {
+        collectibleImageLoaded = true;
+      };
+
+      // Load the milestone image
+      const milestoneImage = new Image();
+      milestoneImage.src = "ben-redic-message.png"; // Replace with your image path
+      let milestoneImageLoaded = false;
+      milestoneImage.onload = () => {
+        milestoneImageLoaded = true;
+        console.log("Milestone image loaded successfully");
+      };
+      milestoneImage.onerror = () => {
+        console.error("Failed to load milestone image");
+      };
+
+      // Initialize Tone.js and load the driving sound
+      let drivingSound = null;
+      let audioLoaded = false;
+      const audioUrl = "racing-down-the-mountain.ogg"; // Define the URL
+      const loadDrivingSound = async () => {
+        try {
+          // Check if the file exists by attempting to fetch it
+          const response = await fetch(audioUrl, { method: "HEAD" });
+          if (!response.ok) {
+            throw new Error(`Audio file not found at ${audioUrl}`);
+          }
+
+          // Create a Tone.Player for the driving sound
+          drivingSound = new Tone.Player({
+            url: audioUrl,
+            loop: true,
+            autostart: false,
+            volume: -100, // Start muted (Tone.js uses dB, -100 is effectively mute)
+          }).toDestination();
+
+          // Load the audio file
+          await drivingSound.load();
+          audioLoaded = true;
+          console.log("Driving sound preloaded successfully with Tone.js");
+        } catch (error) {
+          console.error("Error loading audio with Tone.js:", error);
+        }
+      };
+
+      console.log("Audio URL:", audioUrl);
+
+      // Load the sound when the page loads
+      loadDrivingSound();
+
+      let isMoving = false;
+
+      // Game state
+      let score = 0;
+      let gameOver = false;
+      let lastTime = 0;
+      let gameTime = 0;
+      let showMessage = false;
+      let messageTimer = 0;
+      const messageDuration = 2000; // Display message for 2 seconds
+      let lastMilestone = 0; // Track the last milestone reached
+      const milestoneInterval = 20; // Trigger a message every 20 points
+      const milestoneMessages = [
+        "Schwinge med schweiva!!", // 20
+        "Din bil, schenial!", // 40
+        "Kjøra, kjøra, farli' norsk hengebro!", // 60
+        "Ali! - !Ali -!Ali!", // 80
+        "Shalam - Shalam!", // 100
+      ]; // Array of messages for each milestone
+
+      // Player name
+      let playerName = "";
+
+      // Leaderboard management
+      const LEADERBOARD_KEY = "grandPrixLeaderboard";
+      let leaderboard = JSON.parse(localStorage.getItem(LEADERBOARD_KEY)) || [];
+
+      // Function to update the leaderboard display
+      function updateLeaderboardDisplay() {
+        leaderboardList.innerHTML = "";
+        leaderboard.forEach((entry, index) => {
+          const li = document.createElement("li");
+          li.textContent = `${index + 1}. ${entry.name}: ${entry.score}`;
+          leaderboardList.appendChild(li);
+        });
+      }
+
+      // Function to add a score to the leaderboard
+      function addToLeaderboard(name, score) {
+        leaderboard.push({ name, score });
+        leaderboard.sort((a, b) => b.score - a.score); // Sort descending
+        leaderboard = leaderboard.slice(0, 5); // Keep top 5
+        localStorage.setItem(LEADERBOARD_KEY, JSON.stringify(leaderboard));
+        updateLeaderboardDisplay();
+      }
+
+      // Initialize leaderboard display on page load
+      updateLeaderboardDisplay();
+
+      // Il Tempo Gigante (player car)
+      const player = {
+        x: canvas.width / 2 - 40,
+        y: canvas.height - 120,
+        width: 160,
+        height: 120,
+        speedX: 5,
+        speedY: 5,
+        dx: 0,
+        dy: 0,
+      };
+
+      // Track, obstacles, and collectibles
+      let trackY = 0;
+      const trackSpeed = 5;
+      const obstacles = [];
+      const collectibles = [];
+      const obstacleFrequency = 1500;
+      const collectibleFrequency = 2000;
+      let lastObstacleTime = 0;
+      let lastCollectibleTime = 0;
+
+      // Keyboard controls
+      const keys = {
+        ArrowLeft: false,
+        ArrowRight: false,
+        ArrowUp: false,
+        ArrowDown: false,
+      };
+      document.addEventListener("keydown", (e) => {
+        if (e.key in keys) {
+          keys[e.key] = true;
+        }
+      });
+      document.addEventListener("keyup", (e) => {
+        if (e.key in keys) {
+          keys[e.key] = false;
+        }
+      });
+
+      // Create an obstacle
+      function createObstacle() {
+        const width = 80; // Adjust based on your obstacle image size
+        const height = 80; // Adjust based on your obstacle image size
+        const x = Math.random() * (canvas.width - width);
+        obstacles.push({ x, y: -50, width, height });
+      }
+
+      // Create a collectible
+      function createCollectible() {
+        const width = 80; // Adjust based on your collectible image size
+        const height = 60; // Adjust based on your collectible image size
+        const x = Math.random() * (canvas.width - width);
+        collectibles.push({ x, y: -50, width, height });
+      }
+
+      // Reset the game state
+      function resetGame() {
+        if (drivingSound) {
+          drivingSound.stop();
+          drivingSound.volume.value = -100;
+        }
+        score = 0;
+        gameOver = false;
+        gameTime = 0;
+        trackY = 0;
+        lastObstacleTime = 0;
+        lastCollectibleTime = 0;
+        showMessage = false;
+        messageTimer = 0;
+        obstacles.length = 0;
+        collectibles.length = 0;
+        player.x = canvas.width / 2 - 40;
+        player.y = canvas.height - 120;
+        player.dx = 0;
+        player.dy = 0;
+        isMoving = false; // Reset movement state
+        gameOverDialog.style.display = "none"; // Hide the dialog on restart
+        restartButton.style.display = "none"; // Hide the restart button
+        requestAnimationFrame(update);
+      }
+
+      // Update game state
+      async function update(timestamp) {
+        const gameOverImage = document.getElementById("gameOverImage");
+        const startButton = document.getElementById("startButton");
+        if (gameOver) {
+          if (score >= 100) {
+            gameOverImage.src = "ali-ali.png";
+            gameOverText.textContent = `Game Over, Ali-Ali do kjore bra!🧞`;
+            gameOverScore.textContent = `Final Score: ${score}`;
+          } else {
+            gameOverImage.src = "ben-redic.png";
+            gameOverText.textContent = `Game Over, Suppehua!😵‍💫`;
+            gameOverScore.textContent = `Final Score: ${score}`;
+          }
+          // Add score to leaderboard
+          addToLeaderboard(playerName || "Anonymous", score);
+          if (drivingSound) {
+            drivingSound.volume.value = -100; // Mute using Tone.js
+          }
+          gameOverDialog.style.display = "flex";
+          restartButton.style.display = "block";
+          return;
+        }
+
+        const deltaTime = timestamp - lastTime;
+        lastTime = timestamp;
+
+        // Update game time
+        gameTime += deltaTime;
+        const seconds = Math.floor(gameTime / 1000);
+
+        // Update player movement
+        player.dx = 0;
+        player.dy = 0;
+        if (keys.ArrowLeft && player.x > 0) player.dx = -player.speedX;
+        if (keys.ArrowRight && player.x < canvas.width - player.width)
+          player.dx = player.speedX;
+        if (keys.ArrowUp && player.y > 0) player.dy = -player.speedY;
+        if (keys.ArrowDown && player.y < canvas.height - player.height)
+          player.dy = player.speedY;
+        player.x += player.dx;
+        player.y += player.dy;
+
+        // Check if the player is moving
+        const wasMoving = isMoving;
+        isMoving = player.dx !== 0 || player.dy !== 0; // Moving if dx or dy is non-zero
+
+        if (isMoving && !wasMoving) {
+          if (!drivingSound.started) {
+            await Tone.start();
+            drivingSound.start();
+          }
+          //   drivingSound.volume.value = -10; // Unmute
+        } else if (!isMoving && wasMoving) {
+          drivingSound.volume.value = -100; // Mute
+        }
+
+        // Update track scrolling
+        trackY += trackSpeed;
+        if (trackY >= canvas.height) trackY = 0;
+
+        // Create obstacles
+        if (timestamp - lastObstacleTime > obstacleFrequency) {
+          createObstacle();
+          lastObstacleTime = timestamp;
+        }
+
+        // Create collectibles
+        if (timestamp - lastCollectibleTime > collectibleFrequency) {
+          createCollectible();
+          lastCollectibleTime = timestamp;
+        }
+
+        // Update obstacles
+        obstacles.forEach((obstacle) => {
+          obstacle.y += trackSpeed;
+        });
+        obstacles.filter((ob) => ob.y < canvas.height + ob.height);
+
+        // Update collectibles
+        collectibles.forEach((collectible) => {
+          collectible.y += trackSpeed;
+        });
+
+        // Collectible collision detection
+        collectibles.forEach((collectible, index) => {
+          if (
+            player.x < collectible.x + collectible.width &&
+            player.x + player.width > collectible.x &&
+            player.y < collectible.y + collectible.height &&
+            player.y + player.height > collectible.y
+          ) {
+            score += 10;
+            collectibles.splice(index, 1);
+          }
+        });
+
+        // Check for score milestones
+        // Trigger a message every time the score is exactly a multiple of milestoneInterval
+        if (score > 0 && score % milestoneInterval === 0 && !showMessage) {
+          showMessage = true;
+          messageTimer = messageDuration;
+          console.log(
+            `Milestone reached: ${score}, Message: ${
+              milestoneMessages[
+                Math.min(
+                  Math.floor(score / milestoneInterval) - 1,
+                  milestoneMessages.length - 1
+                )
+              ]
+            }`
+          );
+        }
+
+        // Update message timer
+        if (showMessage) {
+          messageTimer -= deltaTime;
+          if (messageTimer <= 0) {
+            showMessage = false;
+          }
+        }
+
+        // Remove off-screen collectibles
+        collectibles.filter((col) => col.y < canvas.height + col.height);
+
+        // Obstacle collision detection
+        obstacles.forEach((obstacle) => {
+          if (
+            player.x < obstacle.x + obstacle.width &&
+            player.x + player.width > obstacle.x &&
+            player.y < obstacle.y + obstacle.height &&
+            player.y + player.height > obstacle.y
+          ) {
+            gameOver = true;
+          }
+        });
+
+        // Update display
+        scoreDisplay.style.display = "block";
+        gameTimeDisplay.style.display = "block";
+        scoreImage.style.display = "block";
+        scoreDisplay.textContent = `Score: ${score}`;
+        gameTimeDisplay.textContent = `| Time: ${seconds}s`;
+
+        // Draw everything
+        draw();
+
+        requestAnimationFrame(update);
+      }
+
+      // Draw game elements
+      function draw() {
+        // Clear canvas
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+        // Draw track (scrolling road)
+        ctx.fillStyle = "gray";
+        ctx.fillRect(canvas.width / 4, 0, canvas.width / 2, canvas.height);
+        ctx.fillStyle = "white";
+        for (let i = 0; i < canvas.height; i += 60) {
+          ctx.fillRect(
+            canvas.width / 2 - 10,
+            (i + trackY) % canvas.height,
+            20,
+            40
+          );
+        }
+
+        // Draw Il Tempo Gigante using the image
+        if (imageLoaded) {
+          ctx.drawImage(
+            carImage,
+            player.x,
+            player.y,
+            player.width,
+            player.height
+          );
+        } else {
+          ctx.fillStyle = "#B8860B";
+          ctx.fillRect(player.x, player.y, player.width, player.height);
+        }
+
+        // Draw obstacles using the image
+        obstacles.forEach((obstacle) => {
+          if (obstacleImageLoaded) {
+            ctx.drawImage(
+              obstacleImage,
+              obstacle.x,
+              obstacle.y,
+              obstacle.width,
+              obstacle.height
+            );
+          } else {
+            ctx.fillStyle = "red";
+            ctx.fillRect(
+              obstacle.x,
+              obstacle.y,
+              obstacle.width,
+              obstacle.height
+            );
+          }
+        });
+
+        // Draw collectibles using the image
+        collectibles.forEach((collectible) => {
+          if (collectibleImageLoaded) {
+            ctx.drawImage(
+              collectibleImage,
+              collectible.x,
+              collectible.y,
+              collectible.width,
+              collectible.height
+            );
+          } else {
+            ctx.fillStyle = "green";
+            ctx.beginPath();
+            ctx.arc(
+              collectible.x + collectible.width / 2,
+              collectible.y + collectible.height / 2,
+              collectible.width / 2,
+              0,
+              Math.PI * 2
+            );
+            ctx.fill();
+          }
+        });
+
+        // Draw the milestone message and image if active
+        if (showMessage) {
+          const currentMilestone =
+            Math.floor(score / milestoneInterval) * milestoneInterval;
+          const milestoneIndex = Math.min(
+            Math.floor(currentMilestone / milestoneInterval) - 1,
+            milestoneMessages.length - 1
+          );
+
+          // Define image dimensions
+          const imageWidth = 80;
+          const imageHeight = 80;
+
+          // Calculate positions
+          const totalWidth =
+            imageWidth +
+            20 +
+            ctx.measureText(milestoneMessages[milestoneIndex]).width; // Image width + gap + text width
+          const startX = canvas.width / 2 - totalWidth / 2; // Start position to center the combined image and text
+          const imageX = startX; // Image on the left
+          const imageY = canvas.height / 2 - imageHeight / 2; // Vertically center the image
+          const textX = imageX + imageWidth + 20; // Text to the right of the image with a 20px gap
+          const textY = canvas.height / 2 + 10; // Vertically center the text (adjust for font baseline)
+
+          // Draw the milestone image to the left
+          if (milestoneImageLoaded) {
+            ctx.drawImage(
+              milestoneImage,
+              imageX,
+              imageY,
+              imageWidth,
+              imageHeight
+            );
+          } else {
+            // Fallback if image fails to load
+            ctx.fillStyle = "yellow";
+            ctx.fillRect(imageX, imageY, imageWidth, imageHeight);
+          }
+
+          // Draw the milestone text to the right of the image
+          ctx.fillStyle = "green";
+          ctx.font = "38px Arial";
+          ctx.textAlign = "left"; // Align text to the left for precise positioning
+          ctx.fillText(milestoneMessages[milestoneIndex], textX, textY);
+        }
+      }
+
+      // Add event listener for the restart button
+      restartButton.addEventListener("click", resetGame);
+
+      // Add event listener for the start button
+      startButton.addEventListener("click", async () => {
+        // Capture player name
+        playerName = nameInput.value.trim();
+        if (!playerName) {
+          playerName = "Anonymous";
+        }
+        try {
+          await Tone.start();
+          console.log("AudioContext started successfully");
+        } catch (error) {
+          console.error("Failed to start AudioContext:", error);
+        }
+        startScreen.style.display = "none"; // Hide the start screen
+        canvas.style.display = "block"; // Show the canvas
+        scoreDisplay.style.display = "block"; // Show the score
+        restartButton.style.display = "none"; // Hide the restart button
+        lastTime = 0; // Reset lastTime
+        requestAnimationFrame(update); // Start the game loop
+      });
+
+      scoreDisplay.style.display = "none";
+      gameTimeDisplay.style.display = "none";
+      scoreImage.style.display = "none";
+      restartButton.style.display = "none";
+    </script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/howler/2.2.3/howler.min.js"></script>
+  </body>
+</html>
