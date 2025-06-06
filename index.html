@@ -2,7 +2,6 @@
 <html>
   <head>
     <title>Il Tempo Gigante Grand Prix</title>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.8.49/Tone.js"></script>
     <style>
       canvas {
         border: 2px solid black;
@@ -271,40 +270,6 @@
         console.error("Failed to load milestone image");
       };
 
-      // Initialize Tone.js and load the driving sound
-      let drivingSound = null;
-      let audioLoaded = false;
-      const audioUrl = "racing-down-the-mountain.ogg"; // Define the URL
-      const loadDrivingSound = async () => {
-        try {
-          // Check if the file exists by attempting to fetch it
-          const response = await fetch(audioUrl, { method: "HEAD" });
-          if (!response.ok) {
-            throw new Error(`Audio file not found at ${audioUrl}`);
-          }
-
-          // Create a Tone.Player for the driving sound
-          drivingSound = new Tone.Player({
-            url: audioUrl,
-            loop: true,
-            autostart: false,
-            volume: -100, // Start muted (Tone.js uses dB, -100 is effectively mute)
-          }).toDestination();
-
-          // Load the audio file
-          await drivingSound.load();
-          audioLoaded = true;
-          console.log("Driving sound preloaded successfully with Tone.js");
-        } catch (error) {
-          console.error("Error loading audio with Tone.js:", error);
-        }
-      };
-
-      console.log("Audio URL:", audioUrl);
-
-      // Load the sound when the page loads
-      loadDrivingSound();
-
       let isMoving = false;
 
       // Game state
@@ -412,10 +377,6 @@
 
       // Reset the game state
       function resetGame() {
-        if (drivingSound) {
-          drivingSound.stop();
-          drivingSound.volume.value = -100;
-        }
         score = 0;
         gameOver = false;
         gameTime = 0;
@@ -452,9 +413,7 @@
           }
           // Add score to leaderboard
           addToLeaderboard(playerName || "Anonymous", score);
-          if (drivingSound) {
-            drivingSound.volume.value = -100; // Mute using Tone.js
-          }
+
           gameOverDialog.style.display = "flex";
           restartButton.style.display = "block";
           return;
@@ -482,16 +441,6 @@
         // Check if the player is moving
         const wasMoving = isMoving;
         isMoving = player.dx !== 0 || player.dy !== 0; // Moving if dx or dy is non-zero
-
-        if (isMoving && !wasMoving) {
-          if (!drivingSound.started) {
-            await Tone.start();
-            drivingSound.start();
-          }
-          //   drivingSound.volume.value = -10; // Unmute
-        } else if (!isMoving && wasMoving) {
-          drivingSound.volume.value = -100; // Mute
-        }
 
         // Update track scrolling
         trackY += trackSpeed;
