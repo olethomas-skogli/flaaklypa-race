@@ -1093,6 +1093,15 @@ const canvas = document.getElementById("gameCanvas");
         }
       });
 
+      // Add restart functionality with 'R' key during game over
+      document.addEventListener("keydown", (e) => {
+        if (gameOver && (e.key === 'r' || e.key === 'R')) {
+          e.preventDefault();
+          resetGame();
+          console.log('Game restarted with R key');
+        }
+      });
+
       // Simple tap handlers for mobile (precise movement)
       function handleTap(side) {
         if (!gameStarted || gameOver) return;
