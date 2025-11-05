@@ -1500,11 +1500,14 @@ const canvas = document.getElementById("gameCanvas");
           );
         }
 
-        // Check for salam-salam milestones (90, 120, 150, 180, etc.)
-        // Pattern: starting at 90, then every 30 points
-        if (score >= 90 && (score - 90) % 30 === 0) {
-          // Play salam-salam sound for specific milestones - optimized for performance
+        // Check for salam-salam milestones (100, 130, 160, 190, etc.)
+        // Pattern: starting at 100, then every 30 points
+        if (score >= 100 && (score - 100) % 30 === 0) {
+          // Stop any currently playing salam-salam sound before playing new one
           try {
+            if (salamSalamSound.playing()) {
+              salamSalamSound.stop();
+            }
             salamSalamSound.play();
             console.log(`Playing salam-salam sound for ${score} points milestone`);
           } catch (e) {
