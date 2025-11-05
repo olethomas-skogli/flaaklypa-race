@@ -105,7 +105,14 @@ const canvas = document.getElementById("gameCanvas");
 
       // Car selection event handlers
       function initCarSelection() {
+        console.log('🚗 Initializing car selection...');
         const carOptions = document.querySelectorAll('.car-option');
+        console.log('🚗 Found car options:', carOptions.length);
+        
+        if (carOptions.length === 0) {
+          console.error('❌ No car options found! Check if DOM elements exist.');
+          return;
+        }
         
         // Add click handlers for car selection
         carOptions.forEach(option => {
@@ -139,21 +146,29 @@ const canvas = document.getElementById("gameCanvas");
         });
         
         // Confirm car selection button
-        confirmCarButton.addEventListener('click', () => {
-          goToStep(2);
-        });
+        if (confirmCarButton) {
+          confirmCarButton.addEventListener('click', () => {
+            goToStep(2);
+          });
+        } else {
+          console.error('❌ confirmCarButton element not found!');
+        }
         
         // Name input handling
-        nameInput.addEventListener('input', () => {
-          const name = nameInput.value.trim();
-          confirmNameButton.disabled = name.length === 0;
-        });
-        
-        // Confirm name button
-        confirmNameButton.addEventListener('click', () => {
-          playerName = nameInput.value.trim() || 'Anonymous';
-          goToStep(3);
-        });
+        if (nameInput && confirmNameButton) {
+          nameInput.addEventListener('input', () => {
+            const name = nameInput.value.trim();
+            confirmNameButton.disabled = name.length === 0;
+          });
+          
+          // Confirm name button
+          confirmNameButton.addEventListener('click', () => {
+            playerName = nameInput.value.trim() || 'Anonymous';
+            goToStep(3);
+          });
+        } else {
+          console.error('❌ nameInput or confirmNameButton elements not found!');
+        }
       }
       
       function goToStep(step) {
@@ -266,6 +281,29 @@ const canvas = document.getElementById("gameCanvas");
         console.error("Failed to load mist message image");
       };
 
+      // Load desert obstacle images
+      const palmImage = new Image();
+      palmImage.src = "palm.png";
+      let palmImageLoaded = false;
+      palmImage.onload = () => {
+        palmImageLoaded = true;
+        console.log("Palm image loaded successfully");
+      };
+      palmImage.onerror = () => {
+        console.error("Failed to load palm image");
+      };
+
+      const camelImage = new Image();
+      camelImage.src = "camel.png";
+      let camelImageLoaded = false;
+      camelImage.onload = () => {
+        camelImageLoaded = true;
+        console.log("Camel image loaded successfully");
+      };
+      camelImage.onerror = () => {
+        console.error("Failed to load camel image");
+      };
+
       let isMoving = false;
 
       // Game state
@@ -293,10 +331,33 @@ const canvas = document.getElementById("gameCanvas");
       let mistMessageTimer = 0;
       const mistMessageDuration = 2000; // Display mist message for 2 seconds
       
+      // Desert message variables
+      let showDesertMessage = false;
+      let desertMessageTimer = 0;
+      const desertMessageDuration = 2000; // Display desert message for 2 seconds
+      
       // Radar effect variables
       let radarActive = false;
       let radarTimer = 0;
       const radarDuration = 8000; // 8 seconds in milliseconds
+      
+      // Desert scene variables
+      let desertSceneActive = false;
+      let desertSceneTimer = 0;
+      const desertSceneDuration = 8000; // 8 seconds in milliseconds
+      let desertSoundStarted = false;
+      let firstRadarCompleted = false;
+      let preDesertTrackSpeed = 600; // Will be updated to current speed when desert scene starts
+      let preDesertPlayerSpeed = 700; // Will be updated to current speed when desert scene starts
+      
+      // Desert obstacle spawning variables
+      const desertObstacles = [];
+      const desertObstacleFrequency = 750; // 2x more frequent than regular (1500/2)
+      let lastDesertObstacleTime = 0;
+      
+      // Desert collectible spawning variables
+      const desertCollectibleFrequency = 1500; // Slightly more frequent than normal (2000ms -> 1500ms)
+      let lastDesertCollectibleTime = 0;
       
       // Solan car obstacle spawning counter
       let solanObstacleCounter = 0;
@@ -570,6 +631,93 @@ const canvas = document.getElementById("gameCanvas");
         };
       }
 
+      // Desert scene sound
+      let desertSound;
+      let aladdinOilSound;
+      try {
+        desertSound = new Howl({
+          src: ["flaklypa-stille-som-orken.mp3"],
+          volume: 1.0, // Primary desert sound - maximum volume for full immersion
+          loop: false,
+          autoplay: false,
+          html5: false, // Use Web Audio for better timing precision
+          pool: 1,
+          preload: true,
+          onload: function() {
+            console.log('✅ Desert sound (flaklypa-stille-som-orken.mp3) loaded successfully');
+            console.log('🎵 Desert sound duration:', desertSound.duration(), 'seconds');
+          },
+          onloaderror: function(id, error) { 
+            console.error('❌ Desert sound failed to load:', error);
+          },
+          onplay: function() {
+            console.log('🔊 Desert sound started playing (primary audio)');
+          },
+          onplayerror: function(id, error) { 
+            console.error('❌ Desert sound failed to play:', error); 
+          },
+          onstop: function() {
+            console.log('⏹️ Desert sound stopped');
+          },
+          onend: function() {
+            console.log('🔊 flaklypa-stille-som-orken.mp3 ended naturally');
+          }
+        });
+
+        aladdinOilSound = new Howl({
+          src: ["aladdin-oil.mp3"],
+          volume: 0.15, // Background volume - very low so primary desert sound dominates
+          loop: true, // Loop for continuous background atmosphere
+          autoplay: false,
+          html5: false, // Use Web Audio for better timing precision
+          pool: 1,
+          preload: true,
+          onload: function() {
+            console.log('✅ Aladdin oil sound (aladdin-oil.mp3) loaded successfully');
+            console.log('🎵 Aladdin oil sound duration:', aladdinOilSound.duration(), 'seconds');
+          },
+          onloaderror: function(id, error) { 
+            console.error('❌ Aladdin oil sound failed to load:', error);
+          },
+          onplay: function() {
+            console.log('🔊 Aladdin oil sound started playing (background audio, volume 0.15)');
+          },
+          onplayerror: function(id, error) { 
+            console.error('❌ Aladdin oil sound failed to play:', error); 
+          },
+          onstop: function() {
+            console.log('⏹️ Aladdin oil sound stopped');
+          },
+          onend: function() {
+            console.log('🔊 aladdin-oil.mp3 ended naturally (will loop)');
+          }
+        });
+      } catch (e) {
+        console.error('❌ Error creating desert sounds:', e);
+        desertSound = {
+          play: () => console.warn('Desert sound fallback - no audio'),
+          stop: () => {},
+          state: () => 'unloaded',
+          playing: () => false,
+          duration: () => 0
+        };
+        aladdinOilSound = {
+          play: () => console.warn('Aladdin oil sound fallback - no audio'),
+          stop: () => {},
+          state: () => 'unloaded',
+          playing: () => false,
+          duration: () => 0
+        };
+      }
+
+      // Function to check if desert sounds are ready
+      function areDesertSoundsReady() {
+        const desertReady = desertSound && desertSound.state() === 'loaded';
+        const aladdinReady = aladdinOilSound && aladdinOilSound.state() === 'loaded';
+        console.log('🎵 Desert sounds ready check - Desert:', desertReady, 'Aladdin:', aladdinReady);
+        return desertReady && aladdinReady;
+      }
+
       // Test sabotage sound function (for debugging)
       function testSabotageSound() {
         console.log('🧪 TESTING SABOTAGE SOUND');
@@ -673,6 +821,7 @@ const canvas = document.getElementById("gameCanvas");
 
       // Initialize Firebase real-time leaderboard listener
       function initializeLeaderboard() {
+        console.log('🏆 Firebase enabled:', firebaseEnabled, 'leaderboardRef:', !!leaderboardRef);
         if (firebaseEnabled && leaderboardRef) {
           // Listen for real-time updates
           leaderboardRef.orderByChild('score').limitToLast(10).on('value', (snapshot) => {
@@ -697,12 +846,15 @@ const canvas = document.getElementById("gameCanvas");
 
       // Load leaderboard from localStorage (fallback)
       function loadLocalLeaderboard() {
+        console.log('🏆 Loading local leaderboard...');
         const localLeaderboard = JSON.parse(localStorage.getItem(LEADERBOARD_KEY)) || [];
         leaderboard = localLeaderboard.slice(0, 10);
+        console.log('🏆 Local leaderboard loaded:', leaderboard.length, 'entries');
         updateLeaderboardDisplay();
       }
 
       // Initialize leaderboard display on page load
+      console.log('🏆 Initializing leaderboard...');
       initializeLeaderboard();
 
       // Mobile-specific functions
@@ -825,6 +977,13 @@ const canvas = document.getElementById("gameCanvas");
         }
       }
 
+      // Game speed constants (pixels per second for consistent speed across devices)
+      const BASE_TRACK_SPEED = 600; // starting speed in pixels per second
+      const BASE_PLAYER_SPEED = 700; // starting speed in pixels per second
+      const SPEED_INCREASE_PER_POINT = 10; // pixels per second increase per point (aggressive difficulty scaling)
+      const SPEED_INCREASE_PER_10_SECONDS = 8; // pixels per second increase every 10 seconds
+      const MAX_SPEED_MULTIPLIER = 8; // maximum speed (8x base speed for extreme challenge)
+
       // Function to update game speed based on score and time
       function updateGameSpeed() {
         const pointSpeedIncrease = (score / 10) * SPEED_INCREASE_PER_POINT;
@@ -855,13 +1014,6 @@ const canvas = document.getElementById("gameCanvas");
         player.speedX = currentPlayerSpeed;
         player.speedY = currentPlayerSpeed;
       }
-
-      // Game speed constants (pixels per second for consistent speed across devices)
-      const BASE_TRACK_SPEED = 600; // starting speed in pixels per second
-      const BASE_PLAYER_SPEED = 700; // starting speed in pixels per second
-      const SPEED_INCREASE_PER_POINT = 10; // pixels per second increase per point (aggressive difficulty scaling)
-      const SPEED_INCREASE_PER_10_SECONDS = 8; // pixels per second increase every 10 seconds
-      const MAX_SPEED_MULTIPLIER = 8; // maximum speed (8x base speed for extreme challenge)
 
       // Dynamic speed variables
       let currentTrackSpeed = BASE_TRACK_SPEED;
@@ -1135,6 +1287,52 @@ const canvas = document.getElementById("gameCanvas");
         collectibles.push({ x, y: -50, width, height, isRadar });
       }
 
+      // Create a desert collectible (aladdin oil lamp)
+      function createDesertCollectible() {
+        const width = isMobile() ? 50 : 65;
+        const height = isMobile() ? 40 : 45;
+        
+        // Get current canvas display width
+        const canvasDisplayWidth = canvas.getBoundingClientRect().width;
+        
+        // Spawn within track boundaries (mobile: 70%, desktop: 50%)
+        const trackWidthRatio = isMobile() ? 0.7 : 0.5;
+        const trackLeft = canvasDisplayWidth * (1 - trackWidthRatio) / 2;
+        const trackWidth = canvasDisplayWidth * trackWidthRatio;
+        const x = trackLeft + Math.random() * (trackWidth - width);
+        
+        // Desert collectibles are always oil lamps (not radar)
+        const isRadar = false;
+        
+        collectibles.push({ x, y: -50, width, height, isRadar });
+      }
+
+      // Create a desert obstacle (palm or camel)
+      function createDesertObstacle() {
+        // Get current canvas display width
+        const canvasDisplayWidth = canvas.getBoundingClientRect().width;
+        
+        // Randomly choose between palm and camel
+        const type = Math.random() < 0.5 ? 'palm' : 'camel';
+        
+        let width, height;
+        if (type === 'palm') {
+          width = isMobile() ? 60 : 80;
+          height = isMobile() ? 90 : 120;
+        } else { // camel
+          width = isMobile() ? 70 : 90;
+          height = isMobile() ? 50 : 70;
+        }
+        
+        // Spawn within track boundaries (mobile: 70%, desktop: 50%)
+        const trackWidthRatio = isMobile() ? 0.7 : 0.5;
+        const trackLeft = canvasDisplayWidth * (1 - trackWidthRatio) / 2;
+        const trackWidth = canvasDisplayWidth * trackWidthRatio;
+        const x = trackLeft + Math.random() * (trackWidth - width);
+        
+        desertObstacles.push({ x, y: -50, width, height, type });
+      }
+
       // Reset the game state
       function resetGame() {
         score = 0;
@@ -1144,11 +1342,14 @@ const canvas = document.getElementById("gameCanvas");
         lastObstacleTime = 0;
         lastCollectibleTime = 0;
         lastSideObstacleTime = 0;
+        lastDesertObstacleTime = 0;
+        lastDesertCollectibleTime = 0;
         showMessage = false;
         messageTimer = 0;
         obstacles.length = 0;
         sideObstacles.length = 0;
         collectibles.length = 0;
+        desertObstacles.length = 0;
 
         // Reset player size and position for current device
         if (selectedCar === 'solan-propell-sykkel') {
@@ -1195,9 +1396,21 @@ const canvas = document.getElementById("gameCanvas");
         showMistMessage = false;
         mistMessageTimer = 0;
         
+        // Reset desert message variables
+        showDesertMessage = false;
+        desertMessageTimer = 0;
+        
         // Reset radar effect variables
         radarActive = false;
         radarTimer = 0;
+        
+        // Reset desert scene variables
+        desertSceneActive = false;
+        desertSceneTimer = 0;
+        desertSoundStarted = false;
+        firstRadarCompleted = false;
+        preDesertTrackSpeed = BASE_TRACK_SPEED;
+        preDesertPlayerSpeed = BASE_PLAYER_SPEED;
         
         // Reset Solan obstacle counter
         solanObstacleCounter = 0;
@@ -1227,14 +1440,25 @@ const canvas = document.getElementById("gameCanvas");
 
         backgroundMusic.play();
 
-        // Stop radar and sabotage sounds in case they were playing
-        radarSound.stop();
+        // Stop all game sounds in case they were playing
         try {
+          radarSound.stop();
           sabotageSound.stop();
+          
+          // Stop desert sounds with state checking for better performance
+          if (desertSound && desertSound.playing()) {
+            desertSound.stop();
+            console.log('⏹️ Desert sound stopped on reset');
+          }
+          if (aladdinOilSound && aladdinOilSound.playing()) {
+            aladdinOilSound.stop();
+            console.log('⏹️ Aladdin oil sound stopped on reset');
+          }
+          
           backgroundMusic.volume(0.2); // Restore original background music volume
-          console.log('Stopped sabotage sound - game reset (background music restored)');
+          console.log('✅ All game sounds stopped - game reset (background music restored)');
         } catch (e) {
-          console.warn('Error stopping sabotage sound on reset:', e);
+          console.warn('Error stopping game sounds on reset:', e);
         }
 
         // Reset music speed to normal
@@ -1295,6 +1519,24 @@ const canvas = document.getElementById("gameCanvas");
             console.warn('Error stopping sabotage sound on game over:', e);
           }
 
+          // Stop desert sounds if game over occurs during desert scene
+          try {
+            if (desertSound && typeof desertSound.stop === 'function') {
+              desertSound.stop();
+              console.log('Stopped desert sound - game over');
+            }
+          } catch (e) {
+            console.warn('Error stopping desert sound on game over:', e);
+          }
+          try {
+            if (aladdinOilSound && typeof aladdinOilSound.stop === 'function') {
+              aladdinOilSound.stop();
+              console.log('Stopped aladdin oil sound - game over');
+            }
+          } catch (e) {
+            console.warn('Error stopping aladdin oil sound on game over:', e);
+          }
+
           // Remove game-active and mist-active classes, add game-over class
           document.body.classList.remove("game-active", "mist-active");
           document.body.classList.add("game-over");
@@ -1323,7 +1565,10 @@ const canvas = document.getElementById("gameCanvas");
         const seconds = Math.floor(gameTime / 1000);
 
         // Update game speed continuously (for both time and score increases)
-        updateGameSpeed();
+        // Skip speed updates during desert scene to maintain base speed
+        if (!desertSceneActive) {
+          updateGameSpeed();
+        }
 
         // Update player movement (delta-time based for consistent speed)
         player.dx = 0;
@@ -1355,50 +1600,80 @@ const canvas = document.getElementById("gameCanvas");
         trackY += currentTrackSpeed * (deltaTime / 1000);
         if (trackY >= canvas.height) trackY = 0;
 
-        // Create obstacles
-        if (timestamp - lastObstacleTime > obstacleFrequency) {
+        // Create obstacles (pause spawning during desert scene)
+        if (!desertSceneActive && timestamp - lastObstacleTime > obstacleFrequency) {
           createObstacle();
           lastObstacleTime = timestamp;
         }
 
-        // Create collectibles
-        if (timestamp - lastCollectibleTime > collectibleFrequency) {
+        // Create collectibles (normal gameplay)
+        if (!desertSceneActive && timestamp - lastCollectibleTime > collectibleFrequency) {
           createCollectible();
           lastCollectibleTime = timestamp;
         }
 
-        // Create side obstacles
-        if (timestamp - lastSideObstacleTime > sideObstacleFrequency) {
+        // Create desert collectibles (during desert scene only)
+        if (desertSceneActive && timestamp - lastDesertCollectibleTime > desertCollectibleFrequency) {
+          createDesertCollectible();
+          lastDesertCollectibleTime = timestamp;
+        }
+
+        // Create side obstacles (pause spawning during desert scene)
+        if (!desertSceneActive && timestamp - lastSideObstacleTime > sideObstacleFrequency) {
           createSideObstacle();
           lastSideObstacleTime = timestamp;
         }
 
-        // Update obstacles (delta-time based for consistent speed)
-        obstacles.forEach((obstacle) => {
-          obstacle.y += currentTrackSpeed * (deltaTime / 1000);
-        });
-        // Remove off-screen obstacles
-        for (let i = obstacles.length - 1; i >= 0; i--) {
-          if (obstacles[i].y > canvas.height + obstacles[i].height) {
-            obstacles.splice(i, 1);
+        // Create desert obstacles (only during desert scene, 2x frequency)
+        if (desertSceneActive && timestamp - lastDesertObstacleTime > desertObstacleFrequency) {
+          createDesertObstacle();
+          lastDesertObstacleTime = timestamp;
+        }
+
+        // Update obstacles (freeze movement during desert scene)
+        if (!desertSceneActive) {
+          obstacles.forEach((obstacle) => {
+            obstacle.y += currentTrackSpeed * (deltaTime / 1000);
+          });
+          // Remove off-screen obstacles
+          for (let i = obstacles.length - 1; i >= 0; i--) {
+            if (obstacles[i].y > canvas.height + obstacles[i].height) {
+              obstacles.splice(i, 1);
+            }
           }
         }
 
-        // Update side obstacles (delta-time based for consistent speed)
-        sideObstacles.forEach((obstacle) => {
-          obstacle.y += currentTrackSpeed * (deltaTime / 1000);
-        });
-        // Remove off-screen side obstacles
-        for (let i = sideObstacles.length - 1; i >= 0; i--) {
-          if (sideObstacles[i].y > canvas.height + sideObstacles[i].height) {
-            sideObstacles.splice(i, 1);
+        // Update side obstacles (freeze movement during desert scene)
+        if (!desertSceneActive) {
+          sideObstacles.forEach((obstacle) => {
+            obstacle.y += currentTrackSpeed * (deltaTime / 1000);
+          });
+          // Remove off-screen side obstacles
+          for (let i = sideObstacles.length - 1; i >= 0; i--) {
+            if (sideObstacles[i].y > canvas.height + sideObstacles[i].height) {
+              sideObstacles.splice(i, 1);
+            }
           }
         }
 
-        // Update collectibles (delta-time based for consistent speed)
+        // Update collectibles (use base speed during desert scene)
         collectibles.forEach((collectible) => {
-          collectible.y += currentTrackSpeed * (deltaTime / 1000);
+          const speed = desertSceneActive ? BASE_TRACK_SPEED : currentTrackSpeed;
+          collectible.y += speed * (deltaTime / 1000);
         });
+
+        // Update desert obstacles (only move during desert scene)
+        if (desertSceneActive) {
+          desertObstacles.forEach((obstacle) => {
+            obstacle.y += currentTrackSpeed * (deltaTime / 1000);
+          });
+          // Remove off-screen desert obstacles
+          for (let i = desertObstacles.length - 1; i >= 0; i--) {
+            if (desertObstacles[i].y > canvas.height + desertObstacles[i].height) {
+              desertObstacles.splice(i, 1);
+            }
+          }
+        }
 
         // Collectible collision detection
         collectibles.forEach((collectible, index) => {
@@ -1465,8 +1740,8 @@ const canvas = document.getElementById("gameCanvas");
 
         // Check for score milestones
         // Trigger a message every time the score is exactly a multiple of milestoneInterval
-        // But skip milestone message if mist message is active or if it's a mist trigger (multiples of 50)
-        if (score > 0 && score % milestoneInterval === 0 && !showMessage && !showMistMessage && score % 50 !== 0) {
+        // But skip milestone message if mist message, desert message is active or if it's a mist trigger (multiples of 50)
+        if (score > 0 && score % milestoneInterval === 0 && !showMessage && !showMistMessage && !showDesertMessage && score % 50 !== 0) {
           showMessage = true;
           messageTimer = messageDuration;
 
@@ -1502,7 +1777,7 @@ const canvas = document.getElementById("gameCanvas");
 
         // Check for salam-salam milestones (100, 130, 160, 190, etc.)
         // Pattern: starting at 100, then every 30 points
-        if (score >= 100 && (score - 100) % 30 === 0) {
+        if (score >= 100 && (score - 100) % 30 === 0 && !desertSceneActive) {
           // Stop any currently playing salam-salam sound before playing new one
           try {
             if (salamSalamSound.playing()) {
@@ -1524,10 +1799,12 @@ const canvas = document.getElementById("gameCanvas");
         }
 
         // Check for mist trigger every 50 points (50, 100, 150, etc.)
+        // But don't trigger mist during desert scenes as they're incompatible atmospheric effects
         if (
           score >= 50 &&
           Math.floor(score / 50) > Math.floor(lastMistScore / 50) &&
-          !mistActive
+          !mistActive &&
+          !desertSceneActive
         ) {
           mistActive = true;
           mistTimer = mistDuration;
@@ -1609,6 +1886,14 @@ const canvas = document.getElementById("gameCanvas");
           }
         }
 
+        // Update desert message timer
+        if (showDesertMessage) {
+          desertMessageTimer -= deltaTime;
+          if (desertMessageTimer <= 0) {
+            showDesertMessage = false;
+          }
+        }
+
         // Update radar timer
         if (radarActive) {
           radarTimer -= deltaTime;
@@ -1616,6 +1901,179 @@ const canvas = document.getElementById("gameCanvas");
             radarActive = false;
             // Stop radar sound when radar mode ends
             radarSound.stop();
+            
+            // Check if this is the first radar completion
+            console.log('🧪 Radar ended - firstRadarCompleted:', firstRadarCompleted);
+            if (!firstRadarCompleted) {
+              firstRadarCompleted = true;
+              // Trigger desert scene
+              desertSceneActive = true;
+              desertSceneTimer = desertSceneDuration;
+              desertSoundStarted = false;
+              
+              // Store current speeds before resetting to base speeds
+              preDesertTrackSpeed = currentTrackSpeed;
+              preDesertPlayerSpeed = currentPlayerSpeed;
+              
+              // Reset speeds to base (starting game) speeds during desert scene
+              currentTrackSpeed = BASE_TRACK_SPEED;
+              currentPlayerSpeed = BASE_PLAYER_SPEED;
+              player.speedX = BASE_PLAYER_SPEED;
+              player.speedY = BASE_PLAYER_SPEED;
+              
+              // Clear normal obstacles to show only desert obstacles (palms/camels)
+              obstacles.length = 0;
+              sideObstacles.length = 0;
+              
+              console.log('🏜️ DESERT SCENE ACTIVATED - Speeds reset to base values, normal obstacles cleared');
+              
+              // Trigger desert scene message
+              showDesertMessage = true;
+              desertMessageTimer = desertMessageDuration;
+              console.log('🏜️ Desert message triggered: "Her væra like stille som den ørken"');
+              
+              // Stop background music immediately but delay desert sound
+              try {
+                backgroundMusic.stop();
+                console.log('🏜️ Desert scene activated - background music stopped');
+              } catch (e) {
+                console.warn('Error stopping background music for desert scene:', e);
+              }
+            } else {
+              console.log('🏜️ First radar already completed, skipping desert scene');
+            }
+          }
+        }
+
+        // Update desert scene timer
+        if (desertSceneActive) {
+          desertSceneTimer -= deltaTime;
+          
+          // Start both desert sounds simultaneously after 0.5 seconds
+          if (!desertSoundStarted && desertSceneTimer <= desertSceneDuration - 500) {
+            desertSoundStarted = true;
+            try {
+              // Start primary desert sound (loud and clear)
+              if (desertSound && desertSound.state() === 'loaded') {
+                desertSound.play();
+                console.log('🏜️ Primary desert sound started (0.5 second delay) - volume 1.0');
+              } else {
+                console.warn('⚠️ Primary desert sound not ready, state:', desertSound ? desertSound.state() : 'undefined');
+                desertSound && desertSound.play();
+              }
+              
+              // Start background aladdin sound (low volume)
+              if (aladdinOilSound && aladdinOilSound.state() === 'loaded') {
+                aladdinOilSound.play();
+                console.log('🏜️ Background aladdin sound started (0.5 second delay) - volume 0.15');
+              } else {
+                console.warn('⚠️ Background aladdin sound not ready, state:', aladdinOilSound ? aladdinOilSound.state() : 'undefined');
+                aladdinOilSound && aladdinOilSound.play();
+              }
+              
+              // Preload background music for instant resumption after desert scene
+              if (backgroundMusic && backgroundMusic.state() !== 'loaded') {
+                console.log('🎵 Preloading background music during desert scene for instant resume');
+                backgroundMusic.load();
+              }
+            } catch (e) {
+              console.error('❌ Critical error starting desert sounds:', e);
+              console.log('🔄 Attempting fallback desert audio initialization');
+              // Fallback: try to play sounds individually with error isolation
+              try {
+                if (desertSound) {
+                  desertSound.play();
+                  console.log('✅ Fallback: Primary desert sound started');
+                }
+              } catch (fallbackError) {
+                console.error('❌ Fallback failed for primary desert sound:', fallbackError);
+              }
+              try {
+                if (aladdinOilSound) {
+                  aladdinOilSound.play();
+                  console.log('✅ Fallback: Background aladdin sound started');
+                }
+              } catch (fallbackError) {
+                console.error('❌ Fallback failed for background aladdin sound:', fallbackError);
+              }
+            }
+          }
+          
+          if (desertSceneTimer <= 0) {
+            desertSceneActive = false;
+            
+            // Clear desert obstacles
+            desertObstacles.length = 0;
+            
+            // Restore original speeds from before desert scene
+            currentTrackSpeed = preDesertTrackSpeed;
+            currentPlayerSpeed = preDesertPlayerSpeed;
+            player.speedX = preDesertPlayerSpeed;
+            player.speedY = preDesertPlayerSpeed;
+            
+            console.log('🏜️ Desert scene ended - speeds restored to pre-desert values');
+            
+            // Restore normal game state
+            try {
+              // Stop desert sounds with state checking
+              if (desertSound && desertSound.playing()) {
+                desertSound.stop();
+                console.log('⏹️ Desert sound stopped (was playing)');
+              }
+              if (aladdinOilSound && aladdinOilSound.playing()) {
+                aladdinOilSound.stop();
+                console.log('⏹️ Aladdin oil sound stopped (was playing)');
+              }
+              
+              // Resume background music (should be preloaded for instant start)
+              if (backgroundMusic) {
+                if (backgroundMusic.state() === 'loaded') {
+                  backgroundMusic.play();
+                  console.log('🎵 Background music resumed instantly (preloaded) - state:', backgroundMusic.state());
+                } else {
+                  console.warn('⚠️ Background music not preloaded, attempting to load and play - state:', backgroundMusic.state());
+                  backgroundMusic.once('load', () => {
+                    backgroundMusic.play();
+                    console.log('🎵 Background music started after loading');
+                  });
+                  backgroundMusic.load();
+                  // Fallback immediate play attempt
+                  backgroundMusic.play();
+                }
+              } else {
+                console.error('❌ Background music object not available');
+              }
+              
+              console.log('🏜️ Desert scene ended - all audio restored');
+            } catch (e) {
+              console.error('❌ Critical error restoring audio after desert scene:', e);
+              console.log('🔄 Attempting fallback audio restoration');
+              // Fallback: try each audio operation individually
+              try {
+                if (desertSound && typeof desertSound.stop === 'function') {
+                  desertSound.stop();
+                  console.log('✅ Fallback: Desert sound stopped');
+                }
+              } catch (fallbackError) {
+                console.error('❌ Fallback failed stopping desert sound:', fallbackError);
+              }
+              try {
+                if (aladdinOilSound && typeof aladdinOilSound.stop === 'function') {
+                  aladdinOilSound.stop();
+                  console.log('✅ Fallback: Aladdin sound stopped');
+                }
+              } catch (fallbackError) {
+                console.error('❌ Fallback failed stopping aladdin sound:', fallbackError);
+              }
+              try {
+                if (backgroundMusic && typeof backgroundMusic.play === 'function') {
+                  backgroundMusic.play();
+                  console.log('✅ Fallback: Background music started');
+                }
+              } catch (fallbackError) {
+                console.error('❌ Fallback failed starting background music:', fallbackError);
+              }
+            }
           }
         }
 
@@ -1748,17 +2206,82 @@ const canvas = document.getElementById("gameCanvas");
           }
         });
 
-        // Update display
-        scoreDisplay.style.display = "block";
-        gameTimeDisplay.style.display = "block";
-        speedIndicator.style.display = "block";
-        fpsCounter.style.display = "block";
-        
-        // Hide scoreImage on mobile, show on desktop
-        if (isMobile()) {
-          scoreImage.style.display = "none";
+        // Desert obstacle collision detection (only during desert scene)
+        if (desertSceneActive) {
+          desertObstacles.forEach((obstacle) => {
+            // Standard collision for desert obstacles
+            let collisionReduction = 0.3; // More forgiving than regular obstacles
+            
+            // More forgiving collision on mobile
+            if (isMobile()) {
+              collisionReduction = 0.4;
+            }
+            
+            // Extra forgiving for Solan car
+            if (selectedCar === 'solan-propell-sykkel') {
+              collisionReduction = 0.5;
+            }
+            
+            const obstacleCollisionX = obstacle.x + (obstacle.width * collisionReduction / 2);
+            const obstacleCollisionY = obstacle.y + (obstacle.height * collisionReduction / 2);
+            const obstacleCollisionWidth = obstacle.width * (1 - collisionReduction);
+            const obstacleCollisionHeight = obstacle.height * (1 - collisionReduction);
+            
+            // Adjust player collision area based on car type
+            let playerCollisionReduction = 0.2;
+            if (selectedCar === 'solan-propell-sykkel') {
+              playerCollisionReduction = 0.35;
+            }
+            
+            const playerCollisionX = player.x + (player.width * playerCollisionReduction / 2);
+            const playerCollisionY = player.y + (player.height * playerCollisionReduction / 2);
+            const playerCollisionWidth = player.width * (1 - playerCollisionReduction);
+            const playerCollisionHeight = player.height * (1 - playerCollisionReduction);
+            
+            if (
+              playerCollisionX < obstacleCollisionX + obstacleCollisionWidth &&
+              playerCollisionX + playerCollisionWidth > obstacleCollisionX &&
+              playerCollisionY < obstacleCollisionY + obstacleCollisionHeight &&
+              playerCollisionY + playerCollisionHeight > obstacleCollisionY
+            ) {
+              gameOver = true;
+              gameOverCause = 'desert'; // Desert obstacles use desert game over
+              
+              // Play default game over sound for desert obstacles
+              try {
+                if (gameOverSound && gameOverSound.state() === 'loaded') {
+                  gameOverSound.play();
+                } else {
+                  console.warn('Game over sound not ready, attempting to play anyway');
+                  gameOverSound && gameOverSound.play();
+                }
+              } catch (e) {
+                console.warn('Error playing game over sound:', e);
+              }
+            }
+          });
+        }
+
+        // Update display - only show scoreboards when game is active
+        if (gameStarted && !gameOver) {
+          scoreDisplay.style.display = "block";
+          gameTimeDisplay.style.display = "block";
+          speedIndicator.style.display = "block";
+          fpsCounter.style.display = "block";
+          
+          // Hide scoreImage on mobile, show on desktop
+          if (isMobile()) {
+            scoreImage.style.display = "none";
+          } else {
+            scoreImage.style.display = "block";
+          }
         } else {
-          scoreImage.style.display = "block";
+          // Hide scoreboards when game is not active (start menu, game over)
+          scoreDisplay.style.display = "none";
+          gameTimeDisplay.style.display = "none";
+          speedIndicator.style.display = "none";
+          fpsCounter.style.display = "none";
+          scoreImage.style.display = "none";
         }
         scoreDisplay.textContent = `Score: ${score}`;
         gameTimeDisplay.textContent = `| Time: ${seconds}s`;
@@ -1783,12 +2306,26 @@ const canvas = document.getElementById("gameCanvas");
         const displayWidth = canvas.getBoundingClientRect().width;
         const displayHeight = canvas.getBoundingClientRect().height;
 
-        // Draw green grass background (entire canvas)
-        ctx.fillStyle = "#228B22"; // Forest green color for grass
+        // Draw background (desert or grass based on scene)
+        if (desertSceneActive) {
+          // Desert background - sandy beige gradient
+          const gradient = ctx.createLinearGradient(0, 0, 0, displayHeight);
+          gradient.addColorStop(0, "#F4A460"); // Sandy brown
+          gradient.addColorStop(0.5, "#DEB887"); // Burlywood
+          gradient.addColorStop(1, "#D2B48C"); // Tan
+          ctx.fillStyle = gradient;
+        } else {
+          // Normal grass background
+          ctx.fillStyle = "#228B22"; // Forest green color for grass
+        }
         ctx.fillRect(0, 0, displayWidth, displayHeight);
 
         // Draw track (scrolling road) - using display dimensions
-        ctx.fillStyle = "gray";
+        if (desertSceneActive) {
+          ctx.fillStyle = "#CD853F"; // Desert road color (sandy brown)
+        } else {
+          ctx.fillStyle = "gray"; // Normal road color
+        }
         
         // Make track wider on mobile (70% vs 50% on desktop)
         const trackWidthRatio = isMobile() ? 0.7 : 0.5;
@@ -1933,6 +2470,59 @@ const canvas = document.getElementById("gameCanvas");
           }
         });
 
+        // Draw dynamic desert obstacles during desert scene
+        if (desertSceneActive) {
+          desertObstacles.forEach((obstacle) => {
+            // Draw shadow circle behind obstacle
+            const shadowRadius = Math.max(obstacle.width, obstacle.height) / 2 + 8;
+            const shadowCenterX = obstacle.x + obstacle.width / 2;
+            const shadowCenterY = obstacle.y + obstacle.height;
+            
+            // Create shadow gradient
+            const shadowGradient = ctx.createRadialGradient(
+              shadowCenterX, shadowCenterY, 0,
+              shadowCenterX, shadowCenterY, shadowRadius
+            );
+            shadowGradient.addColorStop(0, "rgba(139, 69, 19, 0.3)"); // Brown shadow
+            shadowGradient.addColorStop(0.6, "rgba(139, 69, 19, 0.15)");
+            shadowGradient.addColorStop(1, "rgba(139, 69, 19, 0)");
+            
+            // Draw shadow circle
+            ctx.fillStyle = shadowGradient;
+            ctx.beginPath();
+            ctx.arc(shadowCenterX, shadowCenterY, shadowRadius, 0, Math.PI * 2);
+            ctx.fill();
+            
+            // Draw the desert obstacle image on top of shadow
+            if (obstacle.type === 'palm' && palmImageLoaded) {
+              ctx.drawImage(
+                palmImage,
+                obstacle.x,
+                obstacle.y,
+                obstacle.width,
+                obstacle.height
+              );
+            } else if (obstacle.type === 'camel' && camelImageLoaded) {
+              ctx.drawImage(
+                camelImage,
+                obstacle.x,
+                obstacle.y,
+                obstacle.width,
+                obstacle.height
+              );
+            } else {
+              // Fallback for when images aren't loaded
+              ctx.fillStyle = obstacle.type === 'palm' ? "green" : "brown";
+              ctx.fillRect(
+                obstacle.x,
+                obstacle.y,
+                obstacle.width,
+                obstacle.height
+              );
+            }
+          });
+        }
+
         // Draw regular collectibles (non-radar)
         collectibles.forEach((collectible) => {
           if (!collectible.isRadar) {
@@ -1960,8 +2550,8 @@ const canvas = document.getElementById("gameCanvas");
           }
         });
 
-        // Draw the milestone message and image if active
-        if (showMessage) {
+        // Draw the milestone message and image if active (but not during desert scene)
+        if (showMessage && !desertSceneActive) {
           const currentMilestone =
             Math.floor(score / milestoneInterval) * milestoneInterval;
           const milestoneIndex = Math.min(
@@ -2108,6 +2698,81 @@ const canvas = document.getElementById("gameCanvas");
           ctx.shadowOffsetY = 3;
           
           ctx.fillText(mistMessageText, textX, textY);
+          
+          // Reset shadow
+          ctx.shadowColor = "transparent";
+          ctx.shadowBlur = 0;
+          ctx.shadowOffsetX = 0;
+          ctx.shadowOffsetY = 0;
+        }
+
+        // Draw desert message using ben-redic-message.png
+        if (showDesertMessage) {
+          // Define responsive image dimensions based on device type
+          const isMobileDevice = isMobile();
+          const displayWidth = canvas.getBoundingClientRect().width;
+          const displayHeight = canvas.getBoundingClientRect().height;
+          
+          // Responsive image sizing: smaller on mobile, larger on desktop
+          const imageWidth = isMobileDevice ? Math.min(80, displayWidth * 0.2) : 120;
+          const imageHeight = isMobileDevice ? Math.min(80, displayHeight * 0.12) : 120;
+          
+          // Responsive font size: 1.5x smaller than other messages due to longer text
+          const fontSize = isMobileDevice ? Math.max(13, Math.min(21, (displayWidth * 0.05) / 1.5)) : 32;
+          ctx.font = `${fontSize}px Arial`;
+          
+          // Responsive gap between image and text
+          const gap = isMobileDevice ? Math.max(10, displayWidth * 0.02) : 20;
+
+          // Calculate positions with responsive values
+          const desertMessageText = "Her væra like stille som den ørken";
+          const textWidth = ctx.measureText(desertMessageText).width;
+          const totalWidth = imageWidth + gap + textWidth;
+          const startX = displayWidth / 2 - totalWidth / 2; // Start position to center the combined image and text
+          const imageX = Math.max(10, startX); // Image on the left with minimum margin
+          
+          // Position based on device type: under scoreboards for mobile, top for desktop
+          let imageY, textY;
+          if (isMobileDevice) {
+            // Mobile: position under scoreboards
+            const scoreboardHeight = 80; // Estimated height of scoreboards area
+            const marginFromScoreboards = 10; // Small margin under scoreboards
+            imageY = scoreboardHeight + marginFromScoreboards;
+            textY = imageY + imageHeight / 2 + (fontSize * 0.3);
+          } else {
+            // Desktop: position at top
+            imageY = 20;
+            textY = 20 + imageHeight / 2 + (fontSize * 0.3);
+          }
+          
+          const textX = imageX + imageWidth + gap; // Text to the right of the image
+
+          // Draw the desert message image (ben-redic-message.png) to the left
+          if (milestoneImageLoaded) {
+            ctx.drawImage(
+              milestoneImage,
+              imageX,
+              imageY,
+              imageWidth,
+              imageHeight
+            );
+          } else {
+            // Fallback if image fails to load
+            ctx.fillStyle = "orange";
+            ctx.fillRect(imageX, imageY, imageWidth, imageHeight);
+          }
+
+          // Draw the desert message text to the right of the image
+          ctx.fillStyle = "orange";
+          ctx.textAlign = "left"; // Align text to the left for precise positioning
+          
+          // Add text shadow for better readability (both mobile and desktop)
+          ctx.shadowColor = "rgba(0, 0, 0, 0.8)";
+          ctx.shadowBlur = 6;
+          ctx.shadowOffsetX = 3;
+          ctx.shadowOffsetY = 3;
+          
+          ctx.fillText(desertMessageText, textX, textY);
           
           // Reset shadow
           ctx.shadowColor = "transparent";
