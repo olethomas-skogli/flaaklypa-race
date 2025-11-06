@@ -241,12 +241,28 @@ const canvas = document.getElementById("gameCanvas");
         standRightImageLoaded = true;
       };
 
-      // Load the collectible image
+      // Load the collectible image (aladdin oil lamp)
       const collectibleImage = new Image();
       collectibleImage.src = "aladdin-oil-lamp.png"; // Path to your collectible image
       let collectibleImageLoaded = false;
       collectibleImage.onload = () => {
         collectibleImageLoaded = true;
+      };
+
+      // Load the gold bar image
+      const goldImage = new Image();
+      goldImage.src = "gold.png"; // Path to gold bar image
+      let goldImageLoaded = false;
+      goldImage.onload = () => {
+        goldImageLoaded = true;
+      };
+
+      // Load the Ludvig superpower image
+      const ludvigImage = new Image();
+      ludvigImage.src = "ludvig.png"; // Path to Ludvig superpower image
+      let ludvigImageLoaded = false;
+      ludvigImage.onload = () => {
+        ludvigImageLoaded = true;
       };
 
       // Load the radar image
@@ -367,6 +383,12 @@ const canvas = document.getElementById("gameCanvas");
       let mistMessageTimer = 0;
       const mistMessageDuration = 2000; // Display mist message for 2 seconds
       
+      // Time-based mist system (after first desert scene)
+      let mistTimeBased = false; // Switch to time-based mist after first desert scene
+      let lastMistTime = 0; // Track when last mist occurred for time intervals
+      const mistTimeInterval = 8000; // 8 seconds between mists
+      let radarSpawnedThisMist = false; // Track if radar was already spawned in current mist
+      
       // Radar hint variables (shown when mist starts)
       let showRadarHint = false;
       let radarHintTimer = 0;
@@ -382,6 +404,13 @@ const canvas = document.getElementById("gameCanvas");
       let radarTimer = 0;
       const radarDuration = 8000; // 8 seconds in milliseconds
       
+      // Ludvig superpower effect variables
+      let ludvigActive = false;
+      let ludvigTimer = 0;
+      const ludvigDuration = 6000; // 6 seconds in milliseconds
+      let lastLudvigSpawn = 0; // Track when last Ludvig was spawned to prevent too frequent spawning
+      const ludvigSpawnCooldown = 8000; // 8 seconds minimum between Ludvig spawns
+      
       // Desert scene variables
       let desertSceneActive = false;
       let desertSceneTimer = 0;
@@ -396,8 +425,8 @@ const canvas = document.getElementById("gameCanvas");
       const desertObstacleFrequency = 750; // 2x more frequent than regular (1500/2)
       let lastDesertObstacleTime = 0;
       
-      // Desert collectible spawning variables
-      const desertCollectibleFrequency = 1500; // Slightly more frequent than normal (2000ms -> 1500ms)
+      // Desert collectible spawning variables (more frequent due to gold bars)
+      const desertCollectibleFrequency = 1200; // More frequent to accommodate gold bars (1500ms -> 1200ms)
       let lastDesertCollectibleTime = 0;
       
       // Solan car obstacle spawning counter
@@ -1421,13 +1450,28 @@ const canvas = document.getElementById("gameCanvas");
         const trackWidth = canvasDisplayWidth * trackWidthRatio;
         const x = trackLeft + Math.random() * (trackWidth - width);
         
-        // Determine collectible type based on mist state
-        const isRadar = mistActive;
+        // Determine collectible type based on game state
+        let isRadar = false;
+        let type = 'oil';
         
-        collectibles.push({ x, y: -50, width, height, isRadar });
+        if (mistActive && !radarSpawnedThisMist && !radarActive) {
+          // During mist, spawn radar (only once per mist and when radar is not already active)
+          isRadar = true;
+          type = 'radar';
+          radarSpawnedThisMist = true; // Mark that radar has been spawned for this mist
+        } else if (score >= 30 && gameTime - lastLudvigSpawn > ludvigSpawnCooldown && Math.random() < 0.15) {
+          // Ludvig spawn: 15% chance, only after 30 points, with cooldown
+          type = 'ludvig';
+          lastLudvigSpawn = gameTime;
+        } else {
+          // Normal oil lamp
+          type = 'oil';
+        }
+        
+        collectibles.push({ x, y: -50, width, height, isRadar, type });
       }
 
-      // Create a desert collectible (aladdin oil lamp)
+      // Create a desert collectible (gold bars 4x more frequent than oil lamps)
       function createDesertCollectible() {
         const width = isMobile() ? 50 : 65;
         const height = isMobile() ? 40 : 45;
@@ -1441,10 +1485,13 @@ const canvas = document.getElementById("gameCanvas");
         const trackWidth = canvasDisplayWidth * trackWidthRatio;
         const x = trackLeft + Math.random() * (trackWidth - width);
         
-        // Desert collectibles are always oil lamps (not radar)
+        // Desert collectibles are never radar
         const isRadar = false;
         
-        collectibles.push({ x, y: -50, width, height, isRadar });
+        // 80% chance for gold bar, 20% chance for oil lamp (4:1 ratio)
+        const type = Math.random() < 0.8 ? 'gold' : 'oil';
+        
+        collectibles.push({ x, y: -50, width, height, isRadar, type });
       }
 
       // Create a desert obstacle (palm or camel)
@@ -1538,6 +1585,9 @@ const canvas = document.getElementById("gameCanvas");
         lastMistScore = 0;
         showMistMessage = false;
         mistMessageTimer = 0;
+        mistTimeBased = false;
+        lastMistTime = 0;
+        radarSpawnedThisMist = false;
         
         // Reset desert message variables
         showDesertMessage = false;
@@ -1546,6 +1596,11 @@ const canvas = document.getElementById("gameCanvas");
         // Reset radar effect variables
         radarActive = false;
         radarTimer = 0;
+        
+        // Reset Ludvig superpower variables
+        ludvigActive = false;
+        ludvigTimer = 0;
+        lastLudvigSpawn = 0;
         
         // Reset desert scene variables
         desertSceneActive = false;
@@ -1748,8 +1803,9 @@ const canvas = document.getElementById("gameCanvas");
           lastObstacleTime = timestamp;
         }
 
-        // Create collectibles (normal gameplay)
-        if (!desertSceneActive && timestamp - lastCollectibleTime > collectibleFrequency) {
+        // Create collectibles (normal gameplay) - 3x more frequent during Ludvig effect
+        const currentCollectibleFrequency = ludvigActive ? collectibleFrequency / 3 : collectibleFrequency;
+        if (!desertSceneActive && timestamp - lastCollectibleTime > currentCollectibleFrequency) {
           createCollectible();
           lastCollectibleTime = timestamp;
         }
@@ -1846,6 +1902,7 @@ const canvas = document.getElementById("gameCanvas");
               mistTimer = 0;
               showMistMessage = false;
               mistMessageTimer = 0;
+              radarSpawnedThisMist = false; // Reset flag when radar is collected
               
               // Remove mist-active class
               document.body.classList.remove("mist-active");
@@ -1871,9 +1928,33 @@ const canvas = document.getElementById("gameCanvas");
               } catch (e) {
                 console.warn('Error playing radar sound:', e);
               }
+            } else if (collectible.type === 'ludvig') {
+              // Ludvig superpower collected - activate 2x points and 3x oil lamp frequency
+              ludvigActive = true;
+              ludvigTimer = ludvigDuration;
+              
+              // Trigger score animation
+              scoreDisplay.classList.add("score-animate");
+              scoreImage.classList.add("point-animate");
+
+              // Remove animation classes after animation completes
+              setTimeout(() => {
+                scoreDisplay.classList.remove("score-animate");
+                scoreImage.classList.remove("point-animate");
+              }, 500);
             } else {
-              // Regular collectible
-              score += 10;
+              // Regular collectible - different points based on type, with Ludvig multiplier
+              let points = 10; // default for oil lamps
+              if (collectible.type === 'gold') {
+                points = 20; // gold bars give 20 points
+              }
+              
+              // Apply Ludvig 2x multiplier if active
+              if (ludvigActive) {
+                points *= 2;
+              }
+              
+              score += points;
               
               // Trigger score animation
               scoreDisplay.classList.add("score-animate");
@@ -1967,17 +2048,28 @@ const canvas = document.getElementById("gameCanvas");
           }
         }
 
-        // Check for mist trigger every 50 points (50, 100, 150, etc.)
-        // But don't trigger mist during desert scenes as they're incompatible atmospheric effects
-        if (
-          score >= 50 &&
-          Math.floor(score / 50) > Math.floor(lastMistScore / 50) &&
-          !mistActive &&
-          !desertSceneActive
-        ) {
+        // Check for mist trigger - two systems: score-based (first mist) and time-based (after desert)
+        let shouldTriggerMist = false;
+        
+        if (!mistTimeBased) {
+          // Score-based system: first mist at exactly 50 points only
+          if (score === 50 && lastMistScore < 50) {
+            shouldTriggerMist = true;
+            lastMistScore = score;
+          }
+        } else {
+          // Time-based system: every 8 seconds after first desert scene
+          if (gameTime - lastMistTime >= mistTimeInterval) {
+            shouldTriggerMist = true;
+            lastMistTime = gameTime;
+          }
+        }
+        
+        // Trigger mist if conditions are met and not already active or in desert
+        if (shouldTriggerMist && !mistActive && !desertSceneActive) {
           mistActive = true;
           mistTimer = mistDuration;
-          lastMistScore = score;
+          radarSpawnedThisMist = false; // Reset radar spawn flag for new mist
 
           // Show mist message with "Dirty tricks" for the full mist duration
           showMistMessage = true;
@@ -2034,6 +2126,7 @@ const canvas = document.getElementById("gameCanvas");
           mistTimer -= deltaTime;
           if (mistTimer <= 0) {
             mistActive = false;
+            radarSpawnedThisMist = false; // Reset flag when mist ends naturally
             // Remove mist-active class to hide radar
             document.body.classList.remove("mist-active");
             // Stop sabotage sound when mist ends and restore background music
@@ -2060,6 +2153,15 @@ const canvas = document.getElementById("gameCanvas");
           desertMessageTimer -= deltaTime;
           if (desertMessageTimer <= 0) {
             showDesertMessage = false;
+          }
+        }
+
+        // Update Ludvig timer
+        if (ludvigActive) {
+          ludvigTimer -= deltaTime;
+          if (ludvigTimer <= 0) {
+            ludvigActive = false;
+            console.log('Ludvig superpower ended');
           }
         }
 
@@ -2170,6 +2272,13 @@ const canvas = document.getElementById("gameCanvas");
           
           if (desertSceneTimer <= 0) {
             desertSceneActive = false;
+            
+            // Enable time-based mist system after first desert scene completion
+            if (!mistTimeBased) {
+              mistTimeBased = true;
+              lastMistTime = gameTime; // Initialize timer for next mist
+              console.log('Desert scene completed - switching to time-based mist system (every 8 seconds)');
+            }
             
             // Clear desert obstacles
             desertObstacles.length = 0;
@@ -2767,26 +2876,81 @@ const canvas = document.getElementById("gameCanvas");
         // Draw regular collectibles (non-radar)
         collectibles.forEach((collectible) => {
           if (!collectible.isRadar) {
-            // Draw regular collectible
-            if (collectibleImageLoaded) {
-              ctx.drawImage(
-                collectibleImage,
-                collectible.x,
-                collectible.y,
-                collectible.width,
-                collectible.height
-              );
+            // Draw collectible based on type
+            if (collectible.type === 'gold') {
+              // Draw gold bar
+              if (goldImageLoaded) {
+                ctx.drawImage(
+                  goldImage,
+                  collectible.x,
+                  collectible.y,
+                  collectible.width,
+                  collectible.height
+                );
+              } else {
+                // Fallback for gold bar
+                ctx.fillStyle = "gold";
+                ctx.fillRect(
+                  collectible.x,
+                  collectible.y,
+                  collectible.width,
+                  collectible.height
+                );
+              }
+            } else if (collectible.type === 'ludvig') {
+              // Draw Ludvig superpower with special glow effect
+              ctx.shadowColor = "#FFD700"; // Golden glow
+              ctx.shadowBlur = 15;
+              ctx.shadowOffsetX = 0;
+              ctx.shadowOffsetY = 0;
+              
+              if (ludvigImageLoaded) {
+                ctx.drawImage(
+                  ludvigImage,
+                  collectible.x,
+                  collectible.y,
+                  collectible.width,
+                  collectible.height
+                );
+              } else {
+                // Fallback for Ludvig
+                ctx.fillStyle = "#FFD700";
+                ctx.fillRect(
+                  collectible.x,
+                  collectible.y,
+                  collectible.width,
+                  collectible.height
+                );
+              }
+              
+              // Reset shadow
+              ctx.shadowColor = "transparent";
+              ctx.shadowBlur = 0;
+              ctx.shadowOffsetX = 0;
+              ctx.shadowOffsetY = 0;
             } else {
-              ctx.fillStyle = "green";
-              ctx.beginPath();
-              ctx.arc(
-                collectible.x + collectible.width / 2,
-                collectible.y + collectible.height / 2,
-                collectible.width / 2,
-                0,
-                Math.PI * 2
-              );
-              ctx.fill();
+              // Draw oil lamp (default)
+              if (collectibleImageLoaded) {
+                ctx.drawImage(
+                  collectibleImage,
+                  collectible.x,
+                  collectible.y,
+                  collectible.width,
+                  collectible.height
+                );
+              } else {
+                // Fallback for oil lamp
+                ctx.fillStyle = "green";
+                ctx.beginPath();
+                ctx.arc(
+                  collectible.x + collectible.width / 2,
+                  collectible.y + collectible.height / 2,
+                  collectible.width / 2,
+                  0,
+                  Math.PI * 2
+                );
+                ctx.fill();
+              }
             }
           }
         });
@@ -2967,14 +3131,15 @@ const canvas = document.getElementById("gameCanvas");
           const time = gameTime / 1000;
           ctx.globalAlpha = mistOpacity;
 
-          // Draw multiple layers of much denser mist
-          for (let layer = 0; layer < 5; layer++) {
-            // More layers
+          // Draw optimized mist layers (reduced for better performance)
+          const particlesPerLayer = isMobile() ? 8 : 12; // Fewer particles on mobile
+          const layerCount = isMobile() ? 3 : 4; // Fewer layers on mobile
+          
+          for (let layer = 0; layer < layerCount; layer++) {
             const layerOffset = layer * 80;
             const layerSpeed = (layer + 1) * 0.4;
 
-            for (let i = 0; i < 15; i++) {
-              // More particles per layer
+            for (let i = 0; i < particlesPerLayer; i++) {
               const x =
                 ((i * 80 + Math.sin(time * layerSpeed + i) * 60 + layerOffset) %
                   (canvas.width + 300)) -
@@ -3123,7 +3288,6 @@ const canvas = document.getElementById("gameCanvas");
         // Draw green radar screen overlay if active
         if (radarActive) {
           // Calculate radar opacity based on remaining time
-          const radarProgress = 1 - radarTimer / radarDuration;
           let radarOpacity;
 
           // Fade in for first 0.5 seconds, full opacity for middle, fade out for last 0.5 seconds
@@ -3176,6 +3340,32 @@ const canvas = document.getElementById("gameCanvas");
           ctx.globalAlpha = 1.0;
         }
         
+        // Draw Ludvig superpower status indicator when active
+        if (ludvigActive) {
+          // Use actual canvas dimensions
+          const canvasWidth = canvas.width;
+          
+          // Position at top right corner
+          const statusText = `Ludvig Superpower: ${Math.ceil(ludvigTimer / 1000)}s`;
+          ctx.font = "bold 20px Arial";
+          ctx.fillStyle = "#FFD700"; // Golden color
+          ctx.textAlign = "right";
+          
+          // Add golden glow
+          ctx.shadowColor = "#FFD700";
+          ctx.shadowBlur = 10;
+          ctx.shadowOffsetX = 0;
+          ctx.shadowOffsetY = 0;
+          
+          ctx.fillText(statusText, canvasWidth - 20, 40);
+          
+          // Reset shadow
+          ctx.shadowColor = "transparent";
+          ctx.shadowBlur = 0;
+          ctx.shadowOffsetX = 0;
+          ctx.shadowOffsetY = 0;
+        }
+
         // Draw radar hint message at bottom of canvas when mist starts (outside of radarActive block)
         if (showRadarHint) {
           // Use actual canvas dimensions, not display dimensions
