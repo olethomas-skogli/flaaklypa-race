@@ -389,6 +389,10 @@ const canvas = document.getElementById("gameCanvas");
       const mistTimeInterval = 8000; // 8 seconds between mists
       let radarSpawnedThisMist = false; // Track if radar was already spawned in current mist
       
+      // Speed-based radar spawning system
+      let lastRadarSpawnTime = 0; // Track when last radar was spawned in current mist
+      let radarSpawnCount = 0; // Track how many radars spawned in current mist
+      
       // Radar hint variables (shown when mist starts)
       let showRadarHint = false;
       let radarHintTimer = 0;
@@ -431,6 +435,11 @@ const canvas = document.getElementById("gameCanvas");
       // Desert collectible spawning variables (more frequent due to gold bars)
       const desertCollectibleFrequency = 1200; // More frequent to accommodate gold bars (1500ms -> 1200ms)
       let lastDesertCollectibleTime = 0;
+      
+      // Desert side obstacle spawning variables
+      const desertSideObstacles = [];
+      const desertSideObstacleFrequency = 600; // Frequent spawning for immersive desert experience
+      let lastDesertSideObstacleTime = 0;
       
       // Solan car obstacle spawning counter
       let solanObstacleCounter = 0;
@@ -1439,6 +1448,70 @@ const canvas = document.getElementById("gameCanvas");
         rightSidePatternIndex = (rightSidePatternIndex + 1) % sidePattern.length;
       }
 
+      // Create radar collectible immediately when mist starts
+      function createRadarOnMistStart() {
+        // Only create if radar should spawn and isn't already spawned this mist
+        if (!radarSpawnedThisMist && !radarActive) {
+          // Before desert: spawn radar until first collected, After desert: spawn in every mist
+          if (!firstRadarCompleted || (firstRadarCompleted && mistTimeBased)) {
+            spawnSingleRadar();
+            radarSpawnedThisMist = true; // Mark that radar has been spawned for this mist
+            radarSpawnCount = 1; // Initialize count
+            lastRadarSpawnTime = gameTime; // Track timing for speed-based spawning
+            console.log('🎯 Radar spawned immediately on mist start');
+          }
+        }
+      }
+
+      // Helper function to spawn a single radar (used by multiple spawning systems)
+      function spawnSingleRadar() {
+        const width = isMobile() ? 50 : 65;
+        const height = isMobile() ? 40 : 45;
+        
+        // Get current canvas display width
+        const canvasDisplayWidth = canvas.getBoundingClientRect().width;
+        
+        // Spawn within track boundaries (mobile: 70%, desktop: 50%)
+        const trackWidthRatio = isMobile() ? 0.7 : 0.5;
+        const trackLeft = canvasDisplayWidth * (1 - trackWidthRatio) / 2;
+        const trackWidth = canvasDisplayWidth * trackWidthRatio;
+        const x = trackLeft + Math.random() * (trackWidth - width);
+        
+        // Create radar collectible
+        collectibles.push({ x, y: -50, width, height, isRadar: true, type: 'radar' });
+      }
+
+      // Speed-based radar spawning during mist (professional implementation)
+      function handleSpeedBasedRadarSpawning() {
+        if (mistActive && !radarActive) {
+          // Calculate speed-based radar spawn interval
+          const speedMultiplier = currentTrackSpeed / BASE_TRACK_SPEED;
+          
+          // Base interval: 3000ms (3 seconds), but decreases with speed
+          // At 1x speed: 3000ms, at 2x speed: 1500ms, at 4x speed: 750ms, etc.
+          const baseRadarInterval = 3000;
+          const speedAdjustedInterval = baseRadarInterval / Math.max(speedMultiplier, 1);
+          const minInterval = 800; // Minimum 800ms between radars (prevent spam)
+          const finalInterval = Math.max(speedAdjustedInterval, minInterval);
+          
+          // Check if enough time has passed since last radar spawn
+          if (gameTime - lastRadarSpawnTime >= finalInterval) {
+            // Only spawn if we should have radar and current radar conditions are met
+            if (!firstRadarCompleted || (firstRadarCompleted && mistTimeBased)) {
+              // Don't spawn too many radars (max 4 radars per mist cycle)
+              const maxRadarsPerMist = Math.min(4, Math.floor(speedMultiplier) + 1);
+              
+              if (radarSpawnCount < maxRadarsPerMist) {
+                spawnSingleRadar();
+                radarSpawnCount++;
+                lastRadarSpawnTime = gameTime;
+                console.log(`🚀 Speed-based radar spawn #${radarSpawnCount} (Speed: ${speedMultiplier.toFixed(1)}x, Interval: ${finalInterval.toFixed(0)}ms)`);
+              }
+            }
+          }
+        }
+      }
+
       // Create a collectible
       function createCollectible() {
         const width = isMobile() ? 50 : 65;
@@ -1453,16 +1526,11 @@ const canvas = document.getElementById("gameCanvas");
         const trackWidth = canvasDisplayWidth * trackWidthRatio;
         const x = trackLeft + Math.random() * (trackWidth - width);
         
-        // Determine collectible type based on game state
+        // Determine collectible type based on game state (radar now handled by immediate spawn)
         let isRadar = false;
         let type = 'oil';
         
-        if (mistActive && !radarSpawnedThisMist && !radarActive && !firstRadarCollected) {
-          // During mist, spawn radar until first one is collected
-          isRadar = true;
-          type = 'radar';
-          radarSpawnedThisMist = true; // Mark that radar has been spawned for this mist
-        } else if (score >= 30 && gameTime - lastLudvigSpawn > ludvigSpawnCooldown && Math.random() < 0.15) {
+        if (score >= 30 && gameTime - lastLudvigSpawn > ludvigSpawnCooldown && Math.random() < 0.15) {
           // Ludvig spawn: 15% chance, only after 30 points, with cooldown
           type = 'ludvig';
           lastLudvigSpawn = gameTime;
@@ -1497,21 +1565,32 @@ const canvas = document.getElementById("gameCanvas");
         collectibles.push({ x, y: -50, width, height, isRadar, type });
       }
 
-      // Create a desert obstacle (palm or camel)
+      // Create a desert obstacle (palm, camel, or desperados)
       function createDesertObstacle() {
         // Get current canvas display width
         const canvasDisplayWidth = canvas.getBoundingClientRect().width;
         
-        // Randomly choose between palm and camel
-        const type = Math.random() < 0.5 ? 'palm' : 'camel';
+        // Randomly choose between palm, camel, and desperados (33% each)
+        const rand = Math.random();
+        let type;
+        if (rand < 0.33) {
+          type = 'palm';
+        } else if (rand < 0.66) {
+          type = 'camel';
+        } else {
+          type = 'desperados';
+        }
         
         let width, height;
         if (type === 'palm') {
           width = isMobile() ? 60 : 80;
           height = isMobile() ? 90 : 120;
-        } else { // camel
+        } else if (type === 'camel') {
           width = isMobile() ? 70 : 90;
           height = isMobile() ? 50 : 70;
+        } else { // desperados
+          width = isMobile() ? 90 : 110;  // Wider for better visual appearance
+          height = isMobile() ? 70 : 80;  // Shorter for better visual appearance
         }
         
         // Spawn within track boundaries (mobile: 70%, desktop: 50%)
@@ -1521,6 +1600,54 @@ const canvas = document.getElementById("gameCanvas");
         const x = trackLeft + Math.random() * (trackWidth - width);
         
         desertObstacles.push({ x, y: -50, width, height, type });
+      }
+
+      // Create desert side obstacles (palm, camel, or desperados on sides)
+      function createDesertSideObstacles() {
+        // Get current canvas display width
+        const canvasDisplayWidth = canvas.getBoundingClientRect().width;
+        
+        // Calculate track boundaries to position obstacles on sides
+        const trackWidthRatio = isMobile() ? 0.7 : 0.5;
+        const trackLeft = canvasDisplayWidth * (1 - trackWidthRatio) / 2;
+        const trackRight = trackLeft + (canvasDisplayWidth * trackWidthRatio);
+        
+        // Create obstacles for both sides
+        for (let side of ['left', 'right']) {
+          // Randomly choose obstacle type (33% each: palm, camel, desperados)
+          const rand = Math.random();
+          let type;
+          if (rand < 0.33) {
+            type = 'palm';
+          } else if (rand < 0.66) {
+            type = 'camel';
+          } else {
+            type = 'desperados';
+          }
+          
+          let width, height;
+          if (type === 'palm') {
+            width = isMobile() ? 50 : 70;  // Slightly smaller for sides
+            height = isMobile() ? 80 : 100;
+          } else if (type === 'camel') {
+            width = isMobile() ? 60 : 80;
+            height = isMobile() ? 40 : 60;
+          } else { // desperados
+            width = isMobile() ? 70 : 90;
+            height = isMobile() ? 70 : 90;
+          }
+          
+          let x;
+          if (side === 'left') {
+            // Position on left side, extending into track slightly for danger
+            x = trackLeft - width + (width * 0.3); // 30% overlaps into track
+          } else {
+            // Position on right side, extending into track slightly for danger
+            x = trackRight - (width * 0.3); // 30% overlaps into track
+          }
+          
+          desertSideObstacles.push({ x, y: -50, width, height, type, side });
+        }
       }
 
       // Reset the game state
@@ -1543,6 +1670,7 @@ const canvas = document.getElementById("gameCanvas");
         mountainTrees.length = 0;
         collectibles.length = 0;
         desertObstacles.length = 0;
+        desertSideObstacles.length = 0;
 
         // Reset player size and position for current device
         if (selectedCar === 'solan-propell-sykkel') {
@@ -1591,6 +1719,8 @@ const canvas = document.getElementById("gameCanvas");
         mistTimeBased = false;
         lastMistTime = 0;
         radarSpawnedThisMist = false;
+        lastRadarSpawnTime = 0;
+        radarSpawnCount = 0;
         
         // Reset desert message variables
         showDesertMessage = false;
@@ -1833,6 +1963,12 @@ const canvas = document.getElementById("gameCanvas");
           lastDesertObstacleTime = timestamp;
         }
 
+        // Create desert side obstacles (only during desert scene, frequent spawning)
+        if (desertSceneActive && timestamp - lastDesertSideObstacleTime > desertSideObstacleFrequency) {
+          createDesertSideObstacles();
+          lastDesertSideObstacleTime = timestamp;
+        }
+
         // Update obstacles (freeze movement during desert scene)
         if (!desertSceneActive) {
           obstacles.forEach((obstacle) => {
@@ -1889,6 +2025,17 @@ const canvas = document.getElementById("gameCanvas");
               desertObstacles.splice(i, 1);
             }
           }
+          
+          // Update desert side obstacles
+          desertSideObstacles.forEach((obstacle) => {
+            obstacle.y += currentTrackSpeed * (deltaTime / 1000);
+          });
+          // Remove off-screen desert side obstacles
+          for (let i = desertSideObstacles.length - 1; i >= 0; i--) {
+            if (desertSideObstacles[i].y > canvas.height + desertSideObstacles[i].height) {
+              desertSideObstacles.splice(i, 1);
+            }
+          }
         }
 
         // Collectible collision detection
@@ -1909,6 +2056,7 @@ const canvas = document.getElementById("gameCanvas");
               showMistMessage = false;
               mistMessageTimer = 0;
               radarSpawnedThisMist = false; // Reset flag when radar is collected
+              radarSpawnCount = 0; // Reset radar spawn count when radar is collected
               
               // Remove mist-active class
               document.body.classList.remove("mist-active");
@@ -2077,6 +2225,9 @@ const canvas = document.getElementById("gameCanvas");
           mistTimer = mistDuration;
           radarSpawnedThisMist = false; // Reset radar spawn flag for new mist
 
+          // Immediately spawn radar when mist starts (professional timing)
+          createRadarOnMistStart();
+
           // Show mist message with "Dirty tricks" for the full mist duration
           showMistMessage = true;
           mistMessageTimer = mistDuration;
@@ -2130,6 +2281,10 @@ const canvas = document.getElementById("gameCanvas");
         // Update mist timer
         if (mistActive) {
           mistTimer -= deltaTime;
+          
+          // Handle speed-based radar spawning during mist
+          handleSpeedBasedRadarSpawning();
+          
           if (mistTimer <= 0) {
             mistActive = false;
             
@@ -2140,6 +2295,7 @@ const canvas = document.getElementById("gameCanvas");
             }
             
             radarSpawnedThisMist = false; // Reset flag when mist ends naturally
+            radarSpawnCount = 0; // Reset radar spawn count for next mist
             // Remove mist-active class to hide radar
             document.body.classList.remove("mist-active");
             // Stop sabotage sound when mist ends and restore background music
@@ -2336,6 +2492,7 @@ const canvas = document.getElementById("gameCanvas");
             
             // Clear desert obstacles
             desertObstacles.length = 0;
+            desertSideObstacles.length = 0;
             
             // Restore original speeds from before desert scene
             currentTrackSpeed = preDesertTrackSpeed;
@@ -2453,7 +2610,7 @@ const canvas = document.getElementById("gameCanvas");
             gameOver = true;
             
             // Track what caused the game over
-            if (obstacle.type === 'desperados' && selectedCar === 'solan-propell-sykkel') {
+            if (obstacle.type === 'desperados') {
               gameOverCause = 'desperados';
             } else {
               gameOverCause = 'default';
@@ -2462,7 +2619,7 @@ const canvas = document.getElementById("gameCanvas");
             // Play appropriate game over sound based on obstacle type
             try {
               if (gameOverCause === 'desperados') {
-                // Play desperados sound for desperados obstacles when using Solan car
+                // Play desperados sound for desperados obstacles
                 if (desperadosGameOverSound && desperadosGameOverSound.state() === 'loaded') {
                   desperadosGameOverSound.play();
                 } else {
@@ -2484,19 +2641,19 @@ const canvas = document.getElementById("gameCanvas");
           }
         });
 
-        // Side obstacle collision detection
+        // Side obstacle collision detection - deadly obstacles (mountains and trees)
         sideObstacles.forEach((obstacle) => {
-          // Much more forgiving collision for side obstacles since they're decorative
-          let collisionReduction = 0.6; // Much smaller collision area
+          // More realistic collision for side obstacles - they should be dangerous!
+          let collisionReduction = 0.3; // Less forgiving - mountains and trees are solid obstacles
           
-          // Even more forgiving collision on mobile
+          // Slightly more forgiving collision on mobile
           if (isMobile()) {
-            collisionReduction = 0.7;
+            collisionReduction = 0.4;
           }
           
           // Extra forgiving for Solan car
           if (selectedCar === 'solan-propell-sykkel') {
-            collisionReduction = 0.75;
+            collisionReduction = 0.5;
           }
           
           const obstacleCollisionX = obstacle.x + (obstacle.width * collisionReduction / 2);
@@ -2534,6 +2691,60 @@ const canvas = document.getElementById("gameCanvas");
               }
             } catch (e) {
               console.warn('Error playing game over sound:', e);
+            }
+          }
+        });
+
+        // Mountain and tree collision detection - deadly natural obstacles
+        mountainTrees.forEach((obstacle) => {
+          // Standard collision for mountains and trees - they're solid!
+          let collisionReduction = 0.25; // Less forgiving - mountains and trees are large solid obstacles
+          
+          // Slightly more forgiving collision on mobile
+          if (isMobile()) {
+            collisionReduction = 0.35;
+          }
+          
+          // Extra forgiving for Solan car
+          if (selectedCar === 'solan-propell-sykkel') {
+            collisionReduction = 0.45;
+          }
+          
+          const obstacleCollisionX = obstacle.x + (obstacle.width * collisionReduction / 2);
+          const obstacleCollisionY = obstacle.y + (obstacle.height * collisionReduction / 2);
+          const obstacleCollisionWidth = obstacle.width * (1 - collisionReduction);
+          const obstacleCollisionHeight = obstacle.height * (1 - collisionReduction);
+          
+          // Adjust player collision area based on car type
+          let playerCollisionReduction = 0.2;
+          if (selectedCar === 'solan-propell-sykkel') {
+            playerCollisionReduction = 0.35;
+          }
+          
+          const playerCollisionX = player.x + (player.width * playerCollisionReduction / 2);
+          const playerCollisionY = player.y + (player.height * playerCollisionReduction / 2);
+          const playerCollisionWidth = player.width * (1 - playerCollisionReduction);
+          const playerCollisionHeight = player.height * (1 - playerCollisionReduction);
+          
+          if (
+            playerCollisionX < obstacleCollisionX + obstacleCollisionWidth &&
+            playerCollisionX + playerCollisionWidth > obstacleCollisionX &&
+            playerCollisionY < obstacleCollisionY + obstacleCollisionHeight &&
+            playerCollisionY + playerCollisionHeight > obstacleCollisionY
+          ) {
+            gameOver = true;
+            gameOverCause = 'default'; // Mountains and trees use default game over
+            
+            // Play default game over sound for mountains and trees
+            try {
+              if (gameOverSound && gameOverSound.state() === 'loaded') {
+                gameOverSound.play();
+              } else {
+                console.warn('Game over sound not ready, attempting to play anyway');
+                gameOverSound && gameOverSound.play();
+              }
+            } catch (e) {
+              console.warn('Error playing mountain/tree game over sound:', e);
             }
           }
         });
@@ -2577,18 +2788,106 @@ const canvas = document.getElementById("gameCanvas");
               playerCollisionY + playerCollisionHeight > obstacleCollisionY
             ) {
               gameOver = true;
-              gameOverCause = 'desert'; // Desert obstacles use desert game over
               
-              // Play default game over sound for desert obstacles
+              // Set game over cause based on obstacle type
+              if (obstacle.type === 'desperados') {
+                gameOverCause = 'desperados'; // Desperados use special dialog and sound
+              } else {
+                gameOverCause = 'desert'; // Palm and camel use desert game over
+              }
+              
+              // Play appropriate game over sound based on obstacle type
               try {
-                if (gameOverSound && gameOverSound.state() === 'loaded') {
-                  gameOverSound.play();
+                if (gameOverCause === 'desperados') {
+                  // Play desperados sound for desperados obstacles
+                  if (desperadosGameOverSound && desperadosGameOverSound.state() === 'loaded') {
+                    desperadosGameOverSound.play();
+                  } else {
+                    console.warn('Desperados game over sound not ready, attempting to play anyway');
+                    desperadosGameOverSound && desperadosGameOverSound.play();
+                  }
                 } else {
-                  console.warn('Game over sound not ready, attempting to play anyway');
-                  gameOverSound && gameOverSound.play();
+                  // Play default game over sound for palm/camel
+                  if (gameOverSound && gameOverSound.state() === 'loaded') {
+                    gameOverSound.play();
+                  } else {
+                    console.warn('Game over sound not ready, attempting to play anyway');
+                    gameOverSound && gameOverSound.play();
+                  }
                 }
               } catch (e) {
                 console.warn('Error playing game over sound:', e);
+              }
+            }
+          });
+          
+          // Desert side obstacle collision detection (deadly during desert scene)
+          desertSideObstacles.forEach((obstacle) => {
+            // Less forgiving collision for side obstacles - they're now dangerous!
+            let collisionReduction = 0.2; // More precise collision than decorative side obstacles
+            
+            // Slightly more forgiving collision on mobile
+            if (isMobile()) {
+              collisionReduction = 0.3;
+            }
+            
+            // Extra forgiving for Solan car
+            if (selectedCar === 'solan-propell-sykkel') {
+              collisionReduction = 0.4;
+            }
+            
+            const obstacleCollisionX = obstacle.x + (obstacle.width * collisionReduction / 2);
+            const obstacleCollisionY = obstacle.y + (obstacle.height * collisionReduction / 2);
+            const obstacleCollisionWidth = obstacle.width * (1 - collisionReduction);
+            const obstacleCollisionHeight = obstacle.height * (1 - collisionReduction);
+            
+            // Adjust player collision area based on car type
+            let playerCollisionReduction = 0.2;
+            if (selectedCar === 'solan-propell-sykkel') {
+              playerCollisionReduction = 0.35;
+            }
+            
+            const playerCollisionX = player.x + (player.width * playerCollisionReduction / 2);
+            const playerCollisionY = player.y + (player.height * playerCollisionReduction / 2);
+            const playerCollisionWidth = player.width * (1 - playerCollisionReduction);
+            const playerCollisionHeight = player.height * (1 - playerCollisionReduction);
+            
+            if (
+              playerCollisionX < obstacleCollisionX + obstacleCollisionWidth &&
+              playerCollisionX + playerCollisionWidth > obstacleCollisionX &&
+              playerCollisionY < obstacleCollisionY + obstacleCollisionHeight &&
+              playerCollisionY + playerCollisionHeight > obstacleCollisionY
+            ) {
+              gameOver = true;
+              
+              // Set game over cause based on obstacle type
+              if (obstacle.type === 'desperados') {
+                gameOverCause = 'desperados'; // Desperados use special dialog and sound
+              } else {
+                gameOverCause = 'desert'; // Palm and camel use desert game over
+              }
+              
+              // Play appropriate game over sound based on obstacle type
+              try {
+                if (gameOverCause === 'desperados') {
+                  // Play desperados sound for desperados obstacles
+                  if (desperadosGameOverSound && desperadosGameOverSound.state() === 'loaded') {
+                    desperadosGameOverSound.play();
+                  } else {
+                    console.warn('Desperados game over sound not ready, attempting to play anyway');
+                    desperadosGameOverSound && desperadosGameOverSound.play();
+                  }
+                } else {
+                  // Play default game over sound for palm/camel
+                  if (gameOverSound && gameOverSound.state() === 'loaded') {
+                    gameOverSound.play();
+                  } else {
+                    console.warn('Game over sound not ready, attempting to play anyway');
+                    gameOverSound && gameOverSound.play();
+                  }
+                }
+              } catch (e) {
+                console.warn('Error playing desert side obstacle game over sound:', e);
               }
             }
           });
@@ -2914,9 +3213,82 @@ const canvas = document.getElementById("gameCanvas");
                 obstacle.width,
                 obstacle.height
               );
+            } else if (obstacle.type === 'desperados' && desperadosObstacleImageLoaded) {
+              ctx.drawImage(
+                desperadosObstacleImage,
+                obstacle.x,
+                obstacle.y,
+                obstacle.width,
+                obstacle.height
+              );
             } else {
               // Fallback for when images aren't loaded
-              ctx.fillStyle = obstacle.type === 'palm' ? "green" : "brown";
+              let fillColor = "brown";
+              if (obstacle.type === 'palm') fillColor = "green";
+              else if (obstacle.type === 'desperados') fillColor = "purple";
+              ctx.fillStyle = fillColor;
+              ctx.fillRect(
+                obstacle.x,
+                obstacle.y,
+                obstacle.width,
+                obstacle.height
+              );
+            }
+          });
+          
+          // Draw desert side obstacles during desert scene
+          desertSideObstacles.forEach((obstacle) => {
+            // Draw shadow circle behind side obstacle
+            const shadowRadius = Math.max(obstacle.width, obstacle.height) / 2 + 6;
+            const shadowCenterX = obstacle.x + obstacle.width / 2;
+            const shadowCenterY = obstacle.y + obstacle.height;
+            
+            // Create shadow gradient
+            const shadowGradient = ctx.createRadialGradient(
+              shadowCenterX, shadowCenterY, 0,
+              shadowCenterX, shadowCenterY, shadowRadius
+            );
+            shadowGradient.addColorStop(0, "rgba(139, 69, 19, 0.4)"); // Brown shadow, slightly darker for sides
+            shadowGradient.addColorStop(0.6, "rgba(139, 69, 19, 0.2)");
+            shadowGradient.addColorStop(1, "rgba(139, 69, 19, 0)");
+            
+            // Draw shadow circle
+            ctx.fillStyle = shadowGradient;
+            ctx.beginPath();
+            ctx.arc(shadowCenterX, shadowCenterY, shadowRadius, 0, Math.PI * 2);
+            ctx.fill();
+            
+            // Draw the desert side obstacle image on top of shadow
+            if (obstacle.type === 'palm' && palmImageLoaded) {
+              ctx.drawImage(
+                palmImage,
+                obstacle.x,
+                obstacle.y,
+                obstacle.width,
+                obstacle.height
+              );
+            } else if (obstacle.type === 'camel' && camelImageLoaded) {
+              ctx.drawImage(
+                camelImage,
+                obstacle.x,
+                obstacle.y,
+                obstacle.width,
+                obstacle.height
+              );
+            } else if (obstacle.type === 'desperados' && desperadosObstacleImageLoaded) {
+              ctx.drawImage(
+                desperadosObstacleImage,
+                obstacle.x,
+                obstacle.y,
+                obstacle.width,
+                obstacle.height
+              );
+            } else {
+              // Fallback for when images aren't loaded
+              let fillColor = "brown";
+              if (obstacle.type === 'palm') fillColor = "green";
+              else if (obstacle.type === 'desperados') fillColor = "purple";
+              ctx.fillStyle = fillColor;
               ctx.fillRect(
                 obstacle.x,
                 obstacle.y,
