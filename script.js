@@ -4,6 +4,7 @@ const canvas = document.getElementById("gameCanvas");
       const scoreImage = document.getElementById("scoreImage");
       const gameTimeDisplay = document.getElementById("gameTime");
       const speedIndicator = document.getElementById("speedIndicator");
+      const cycleIndicator = document.getElementById("cycleIndicator");
       const fpsCounter = document.getElementById("fpsCounter");
       const restartButton = document.getElementById("restartButton");
       const gameOverDialog = document.getElementById("gameOverDialog");
@@ -410,6 +411,15 @@ const canvas = document.getElementById("gameCanvas");
       let lastMilestone = 0; // Track the last milestone reached
       const milestoneInterval = 20; // Trigger a message every 20 points
 
+      // Time-based scoring system (20 points every 10 seconds after first radar)
+      let timeBonusActive = false; // Activated after first radar completion
+      let lastTimeBonusAwarded = 0; // Track last time bonus was given
+      const timeBonusInterval = 10000; // 10 seconds in milliseconds
+      const timeBonusPoints = 20; // Points awarded every 10 seconds
+      let showTimeBonusMessage = false;
+      let timeBonusMessageTimer = 0;
+      const timeBonusMessageDuration = 2000; // Display time bonus message for 2 seconds
+
       // Mist effect variables
       let mistActive = false;
       let mistTimer = 0;
@@ -530,6 +540,12 @@ const canvas = document.getElementById("gameCanvas");
       let preWinterWarningTimer = 0;
       let preWinterOriginalPlayerSpeed = 700; // Store original speed for gradual decrease
       let preWinterOriginalTrackSpeed = 600; // Store original track speed for gradual decrease
+      
+      // Endless cycle system variables
+      let currentCycle = 1; // Track which cycle we're on (1, 2, 3, etc.)
+      let cycleSpeedMultiplier = 1.0; // Current speed multiplier for this cycle
+      const cycleSpeedIncrease = 1.8; // Speed multiplier increase per cycle
+      let cycleCompletionPending = false; // Flag to prevent multiple cycle transitions
       
       // Solan car obstacle spawning counter
       let solanObstacleCounter = 0;
@@ -1266,15 +1282,19 @@ const canvas = document.getElementById("gameCanvas");
         
         const totalSpeedIncrease = pointSpeedIncrease + timeSpeedIncrease + extraSpeedBoost;
 
-        const maxTrackSpeed = BASE_TRACK_SPEED * MAX_SPEED_MULTIPLIER;
-        const maxPlayerSpeed = BASE_PLAYER_SPEED * MAX_SPEED_MULTIPLIER;
+        // Apply cycle speed multiplier to base speeds
+        const cycleBoostedTrackSpeed = BASE_TRACK_SPEED * cycleSpeedMultiplier;
+        const cycleBoostedPlayerSpeed = BASE_PLAYER_SPEED * cycleSpeedMultiplier;
+        
+        const maxTrackSpeed = cycleBoostedTrackSpeed * MAX_SPEED_MULTIPLIER;
+        const maxPlayerSpeed = cycleBoostedPlayerSpeed * MAX_SPEED_MULTIPLIER;
 
         currentTrackSpeed = Math.min(
-          BASE_TRACK_SPEED + totalSpeedIncrease,
+          cycleBoostedTrackSpeed + totalSpeedIncrease,
           maxTrackSpeed
         );
         currentPlayerSpeed = Math.min(
-          BASE_PLAYER_SPEED + totalSpeedIncrease,
+          cycleBoostedPlayerSpeed + totalSpeedIncrease,
           maxPlayerSpeed
         );
 
@@ -1283,9 +1303,9 @@ const canvas = document.getElementById("gameCanvas");
         player.speedY = currentPlayerSpeed;
       }
 
-      // Dynamic speed variables
-      let currentTrackSpeed = BASE_TRACK_SPEED;
-      let currentPlayerSpeed = BASE_PLAYER_SPEED;
+      // Dynamic speed variables (start with cycle-adjusted base speeds)
+      let currentTrackSpeed = BASE_TRACK_SPEED * cycleSpeedMultiplier;
+      let currentPlayerSpeed = BASE_PLAYER_SPEED * cycleSpeedMultiplier;
 
       // Il Tempo Gigante (player car) - initialized with mobile-friendly size
       const getPlayerDimensions = () => {
@@ -2118,6 +2138,12 @@ const canvas = document.getElementById("gameCanvas");
         messageTimer = 0;
         showRadarHint = false;
         radarHintTimer = 0;
+        
+        // Reset time bonus system
+        timeBonusActive = false;
+        lastTimeBonusAwarded = 0;
+        showTimeBonusMessage = false;
+        timeBonusMessageTimer = 0;
         obstacles.length = 0;
         sideObstacles.length = 0;
         mountainTrees.length = 0;
@@ -2230,15 +2256,20 @@ const canvas = document.getElementById("gameCanvas");
         // Reset game over cause
         gameOverCause = 'default';
         
+        // Reset endless cycle system
+        currentCycle = 1;
+        cycleSpeedMultiplier = 1.0;
+        cycleCompletionPending = false;
+        
         // Reset side element pattern indices
         leftSidePatternIndex = 0; // Left side starts with mountain
         rightSidePatternIndex = 2; // Right side starts with tree (offset for opposite pattern)
 
-        // Reset speeds to base values
-        currentTrackSpeed = BASE_TRACK_SPEED;
-        currentPlayerSpeed = BASE_PLAYER_SPEED;
-        player.speedX = BASE_PLAYER_SPEED;
-        player.speedY = BASE_PLAYER_SPEED;
+        // Reset speeds to base values (cycle multiplier is now 1.0)
+        currentTrackSpeed = BASE_TRACK_SPEED * cycleSpeedMultiplier;
+        currentPlayerSpeed = BASE_PLAYER_SPEED * cycleSpeedMultiplier;
+        player.speedX = BASE_PLAYER_SPEED * cycleSpeedMultiplier;
+        player.speedY = BASE_PLAYER_SPEED * cycleSpeedMultiplier;
         gameOverDialog.style.display = "none"; // Hide the dialog on restart
         countdownOverlay.style.display = "none"; // Hide countdown overlay
 
@@ -2280,6 +2311,80 @@ const canvas = document.getElementById("gameCanvas");
         gameTime = 0;
 
         requestAnimationFrame(update);
+      }
+
+      // Restart cycle system for endless progression
+      function restartCycle() {
+        console.log(`🔄 Restarting game cycle ${currentCycle} → ${currentCycle + 1}`);
+        
+        // Increment cycle and speed multiplier
+        currentCycle++;
+        cycleSpeedMultiplier *= cycleSpeedIncrease; // 1.8x speed increase
+        
+        // Reset all scene completion flags to restart sequence
+        firstRadarCompleted = false;
+        firstRadarCollected = false;
+        firstWinterCompleted = false;
+        desertSceneActive = false;
+        winterSceneActive = false;
+        mistActive = false;
+        radarActive = false;
+        
+        // Reset scene timers
+        desertSceneTimer = 0;
+        winterSceneTimer = 0;
+        radarTimer = 0;
+        mistTimer = 0;
+        
+        // Reset scene variables
+        desertSoundStarted = false;
+        winterSoundStarted = false;
+        winterFogActive = false;
+        currentSeasonPhase = 'winter';
+        
+        // Reset obstacle and collectible arrays
+        obstacles.length = 0;
+        sideObstacles.length = 0;
+        collectibles.length = 0;
+        desertObstacles.length = 0;
+        desertSideObstacles.length = 0;
+        winterObstacles.length = 0;
+        winterSideObstacles.length = 0;
+        
+        // Reset timing variables for obstacle spawning
+        lastObstacleTime = 0;
+        lastCollectibleTime = 0;
+        lastSideObstacleTime = 0;
+        lastDesertObstacleTime = 0;
+        lastDesertCollectibleTime = 0;
+        lastWinterObstacleTime = 0;
+        lastWinterCollectibleTime = 0;
+        lastWrenchCollectibleTime = 0;
+        lastWinterSideObstacleTime = 0;
+        
+        // Update speeds with new cycle multiplier  
+        const cycleBoostedTrackSpeed = BASE_TRACK_SPEED * cycleSpeedMultiplier;
+        const cycleBoostedPlayerSpeed = BASE_PLAYER_SPEED * cycleSpeedMultiplier;
+        currentTrackSpeed = cycleBoostedTrackSpeed;
+        currentPlayerSpeed = cycleBoostedPlayerSpeed;
+        player.speedX = cycleBoostedPlayerSpeed;
+        player.speedY = cycleBoostedPlayerSpeed;
+        
+        // Reset cycle completion flag
+        cycleCompletionPending = false;
+        
+        // Reset misc variables
+        missedRadarAttempts = 0;
+        solanObstacleCounter = 0;
+        gameOverCause = 'default';
+        
+        // Reset time bonus timer for new cycle (keep active if it was active)
+        lastTimeBonusAwarded = 0; // Reset timer so it starts fresh in new cycle
+        showTimeBonusMessage = false;
+        timeBonusMessageTimer = 0;
+        
+        // Keep score and game time to maintain progression
+        console.log(`✅ Cycle ${currentCycle} started at ${cycleSpeedMultiplier.toFixed(1)}x base speed (Score: ${score})`);
       }
 
       // Game over elements
@@ -2384,6 +2489,18 @@ const canvas = document.getElementById("gameCanvas");
         // Update game time
         gameTime += deltaTime;
         const seconds = Math.floor(gameTime / 1000);
+
+        // Time-based scoring system (20 points every 10 seconds after first radar)
+        if (timeBonusActive && gameTime - lastTimeBonusAwarded >= timeBonusInterval) {
+          score += timeBonusPoints;
+          lastTimeBonusAwarded = gameTime; // Reset timer for next bonus
+          
+          // Show time bonus message
+          showTimeBonusMessage = true;
+          timeBonusMessageTimer = timeBonusMessageDuration;
+          
+          console.log(`⏱️ Time bonus awarded! +${timeBonusPoints} points (Total: ${score})`);
+        }
 
         // Update game speed continuously (for both time and score increases)
         // Skip speed updates during desert scene and winter scenes to maintain controlled speeds
@@ -2866,6 +2983,14 @@ const canvas = document.getElementById("gameCanvas");
           }
         }
 
+        // Update time bonus message timer
+        if (showTimeBonusMessage) {
+          timeBonusMessageTimer -= deltaTime;
+          if (timeBonusMessageTimer <= 0) {
+            showTimeBonusMessage = false;
+          }
+        }
+
         // Update winter hint timer
         if (showWinterHint) {
           winterHintTimer -= deltaTime;
@@ -2895,6 +3020,12 @@ const canvas = document.getElementById("gameCanvas");
             console.log('🧪 Radar ended - firstRadarCompleted:', firstRadarCompleted);
             if (!firstRadarCompleted) {
               firstRadarCompleted = true;
+              
+              // Activate time-based scoring system (20 points every 10 seconds)
+              timeBonusActive = true;
+              lastTimeBonusAwarded = gameTime; // Start timing from now
+              console.log('⏱️ Time bonus system activated - 20 points every 10 seconds!');
+              
               // Trigger desert scene
               desertSceneActive = true;
               desertSceneTimer = desertSceneDuration;
@@ -2940,6 +3071,11 @@ const canvas = document.getElementById("gameCanvas");
           console.log(`🏜️ Alternative desert scene trigger - player missed ${missedRadarAttempts} radar attempts`);
           firstRadarCompleted = true; // Mark as completed to prevent future triggers
           firstRadarCollected = true; // Also mark as collected to prevent further radar spawning
+          
+          // Activate time-based scoring system (20 points every 10 seconds)
+          timeBonusActive = true;
+          lastTimeBonusAwarded = gameTime; // Start timing from now
+          console.log('⏱️ Time bonus system activated - 20 points every 10 seconds! (alternative trigger)');
           
           // Trigger desert scene
           desertSceneActive = true;
@@ -3269,6 +3405,17 @@ const canvas = document.getElementById("gameCanvas");
             player.speedY = currentPlayerSpeed;
             
             console.log('❄️ Winter scene ended - speeds continue natural progression from winter levels');
+            
+            // Check for cycle completion (winter scene is the last scene in sequence)
+            if (!cycleCompletionPending) {
+              cycleCompletionPending = true;
+              console.log(`🔄 Cycle ${currentCycle} completed! Starting cycle ${currentCycle + 1} at ${(cycleSpeedMultiplier * cycleSpeedIncrease).toFixed(1)}x speed`);
+              
+              // Delay cycle restart to avoid immediate transition
+              setTimeout(() => {
+                restartCycle();
+              }, 3000); // 3-second delay before restarting
+            }
             
             // Stop winter sound and restore background music
             try {
@@ -3739,6 +3886,7 @@ const canvas = document.getElementById("gameCanvas");
           scoreDisplay.style.display = "block";
           gameTimeDisplay.style.display = "block";
           speedIndicator.style.display = "block";
+          cycleIndicator.style.display = "block";
           fpsCounter.style.display = "block";
           
           // Hide scoreImage on mobile, show on desktop
@@ -3752,6 +3900,7 @@ const canvas = document.getElementById("gameCanvas");
           scoreDisplay.style.display = "none";
           gameTimeDisplay.style.display = "none";
           speedIndicator.style.display = "none";
+          cycleIndicator.style.display = "none";
           fpsCounter.style.display = "none";
           scoreImage.style.display = "none";
         }
@@ -3761,6 +3910,7 @@ const canvas = document.getElementById("gameCanvas");
           1
         );
         speedIndicator.textContent = `Speed: ${speedMultiplier}x`;
+        cycleIndicator.textContent = `Cycle: ${currentCycle}`;
         fpsCounter.textContent = `FPS: ${currentFps}`;
 
         // Draw everything
@@ -4542,6 +4692,40 @@ const canvas = document.getElementById("gameCanvas");
           ctx.fillText(milestoneMessages[milestoneIndex], textX, textY);
         }
 
+        // Draw time bonus message
+        if (showTimeBonusMessage) {
+          // Define responsive dimensions based on device type
+          const isMobileDevice = isMobile();
+          const displayWidth = canvas.getBoundingClientRect().width;
+          const displayHeight = canvas.getBoundingClientRect().height;
+          
+          // Responsive font size
+          const fontSize = isMobileDevice ? Math.max(16, Math.min(24, displayWidth * 0.04)) : 38;
+          ctx.font = `bold ${fontSize}px Arial`;
+          
+          // Time bonus message text
+          const timeBonusText = `+${timeBonusPoints} Time Bonus!`;
+          const textWidth = ctx.measureText(timeBonusText).width;
+          
+          // Position in top-right corner
+          const textX = displayWidth - textWidth - 20;
+          const textY = 60;
+          
+          // Draw black border for readability
+          ctx.fillStyle = "black";
+          const borderWidth = 2;
+          for (let x = -borderWidth; x <= borderWidth; x++) {
+            for (let y = -borderWidth; y <= borderWidth; y++) {
+              if (x !== 0 || y !== 0) {
+                ctx.fillText(timeBonusText, textX + x, textY + y);
+              }
+            }
+          }
+          
+          // Draw the main green text on top (green for time bonus)
+          ctx.fillStyle = "#00FF00";
+          ctx.fillText(timeBonusText, textX, textY);
+        }
 
         // Draw desert message using ben-redic-message.png
         if (showDesertMessage) {
@@ -5186,6 +5370,7 @@ const canvas = document.getElementById("gameCanvas");
       scoreDisplay.style.display = "none";
       gameTimeDisplay.style.display = "none";
       speedIndicator.style.display = "none";
+      cycleIndicator.style.display = "none";
       fpsCounter.style.display = "none";
       scoreImage.style.display = "none";
 
