@@ -380,6 +380,18 @@ const canvas = document.getElementById("gameCanvas");
         console.error("Failed to load kjelke image");
       };
 
+      // Load wrench image for spring phase collectibles
+      const wrenchImage = new Image();
+      wrenchImage.src = "wrench.png";
+      let wrenchImageLoaded = false;
+      wrenchImage.onload = () => {
+        wrenchImageLoaded = true;
+        console.log("Wrench image loaded successfully");
+      };
+      wrenchImage.onerror = () => {
+        console.error("Failed to load wrench image");
+      };
+
       let isMoving = false;
 
       // Game state
@@ -501,6 +513,16 @@ const canvas = document.getElementById("gameCanvas");
       
       // Winter fog effect variables
       let winterFogActive = false;
+      
+      // Seasonal phase variables (winter scene divided into 3 seasons)
+      let currentSeasonPhase = 'winter'; // 'winter', 'spring', 'summer'
+      const winterPhaseDuration = 7000; // 7 seconds for winter phase
+      const springPhaseDuration = 7000; // 7 seconds for spring/autumn phase  
+      const summerPhaseDuration = 6000; // 6 seconds for summer phase (total 20 seconds)
+      
+      // Wrench collectible variables (for spring phase)
+      const wrenchCollectibleFrequency = 1800; // Same as kjelke frequency
+      let lastWrenchCollectibleTime = 0;
       
       // Pre-winter warning variables (2-second speed decrease before winter scene)
       let preWinterWarningActive = false;
@@ -2057,6 +2079,27 @@ const canvas = document.getElementById("gameCanvas");
         collectibles.push({ x, y: -50, width, height, type, points });
       }
 
+      // Create a wrench collectible (spring phase)
+      function createWrenchCollectible() {
+        const width = isMobile() ? 50 : 65;
+        const height = isMobile() ? 40 : 45;
+        
+        // Get current canvas display width
+        const canvasDisplayWidth = canvas.getBoundingClientRect().width;
+        
+        // Spawn within track boundaries (mobile: 70%, desktop: 50%)
+        const trackWidthRatio = isMobile() ? 0.7 : 0.5;
+        const trackLeft = canvasDisplayWidth * (1 - trackWidthRatio) / 2;
+        const trackWidth = canvasDisplayWidth * trackWidthRatio;
+        const x = trackLeft + Math.random() * (trackWidth - width);
+        
+        // Wrench collectibles have 15 points (same as kjelke)
+        const type = 'wrench';
+        const points = 15;
+        
+        collectibles.push({ x, y: -50, width, height, type, points });
+      }
+
       // Reset the game state
       function resetGame() {
         score = 0;
@@ -2170,6 +2213,10 @@ const canvas = document.getElementById("gameCanvas");
         preWinterPlayerSpeed = BASE_PLAYER_SPEED;
         winterFogActive = false;
         winterObstacleSpawnStartTime = 0;
+        
+        // Reset seasonal phase variables
+        currentSeasonPhase = 'winter';
+        lastWrenchCollectibleTime = 0;
         
         // Reset pre-winter warning variables
         preWinterWarningActive = false;
@@ -2420,9 +2467,15 @@ const canvas = document.getElementById("gameCanvas");
         }
 
         // Create winter collectibles (only after visual delay AND 3-second obstacle spawn delay)
-        if (winterSceneActive && winterFogActive && obstacleSpawnReady && timestamp - lastWinterCollectibleTime > winterCollectibleFrequency) {
+        if (winterSceneActive && winterFogActive && obstacleSpawnReady && currentSeasonPhase === 'winter' && timestamp - lastWinterCollectibleTime > winterCollectibleFrequency) {
           createWinterCollectible();
           lastWinterCollectibleTime = timestamp;
+        }
+
+        // Create wrench collectibles during spring phase (only after visual delay AND 3-second obstacle spawn delay)
+        if (winterSceneActive && winterFogActive && obstacleSpawnReady && currentSeasonPhase === 'spring' && timestamp - lastWrenchCollectibleTime > wrenchCollectibleFrequency) {
+          createWrenchCollectible();
+          lastWrenchCollectibleTime = timestamp;
         }
 
         // Create winter side obstacles (only after visual delay - no obstacle spawn delay for side elements)
@@ -3135,6 +3188,10 @@ const canvas = document.getElementById("gameCanvas");
             // Set the start time for obstacle spawn delay (5 seconds from now)
             winterObstacleSpawnStartTime = Date.now();
             
+            // Initialize seasonal phase system
+            currentSeasonPhase = 'winter';
+            lastWrenchCollectibleTime = 0;
+            
             // Trigger winter hint message
             showWinterHint = true;
             winterHintTimer = winterHintDuration;
@@ -3184,6 +3241,16 @@ const canvas = document.getElementById("gameCanvas");
             // This allows natural game speed increases to resume from the beginning
             
             console.log('❄️ Winter visual effects activated - speeds remain at start level, natural progression resumes');
+          }
+          
+          // Update seasonal phases based on remaining timer
+          const timeElapsed = (winterSceneDuration + winterVisualDelay) - winterSceneTimer;
+          if (timeElapsed >= winterPhaseDuration + springPhaseDuration && currentSeasonPhase !== 'summer') {
+            currentSeasonPhase = 'summer';
+            console.log('☀️ Summer phase activated');
+          } else if (timeElapsed >= winterPhaseDuration && currentSeasonPhase === 'winter') {
+            currentSeasonPhase = 'spring';
+            console.log('🌸 Spring/Autumn phase activated');
           }
           
           // Winter sound is now started immediately when scene begins (no delay)
@@ -3711,7 +3778,7 @@ const canvas = document.getElementById("gameCanvas");
         const displayWidth = canvas.getBoundingClientRect().width;
         const displayHeight = canvas.getBoundingClientRect().height;
 
-        // Draw background (desert, winter, or grass based on scene)
+        // Draw background (desert, seasonal, or grass based on scene)
         if (desertSceneActive) {
           // Desert background - sandy beige gradient
           const gradient = ctx.createLinearGradient(0, 0, 0, displayHeight);
@@ -3720,8 +3787,25 @@ const canvas = document.getElementById("gameCanvas");
           gradient.addColorStop(1, "#D2B48C"); // Tan
           ctx.fillStyle = gradient;
         } else if (winterSceneActive && winterFogActive) {
-          // Winter background - darker white/light gray for sides
-          ctx.fillStyle = "#E8E8E8"; // Darker white/light gray for winter sides
+          // Seasonal background based on current phase
+          const gradient = ctx.createLinearGradient(0, 0, 0, displayHeight);
+          if (currentSeasonPhase === 'winter') {
+            // Winter - light gray/white
+            gradient.addColorStop(0, "#F0F8FF"); // Alice blue
+            gradient.addColorStop(0.5, "#E8E8E8"); // Light gray
+            gradient.addColorStop(1, "#DCDCDC"); // Gainsboro
+          } else if (currentSeasonPhase === 'spring') {
+            // Spring/Autumn - orange/brown transitional colors
+            gradient.addColorStop(0, "#FFA500"); // Orange
+            gradient.addColorStop(0.5, "#CD853F"); // Peru
+            gradient.addColorStop(1, "#D2691E"); // Chocolate
+          } else if (currentSeasonPhase === 'summer') {
+            // Summer - warm green, back to original-like
+            gradient.addColorStop(0, "#32CD32"); // Lime green
+            gradient.addColorStop(0.5, "#228B22"); // Forest green
+            gradient.addColorStop(1, "#006400"); // Dark green
+          }
+          ctx.fillStyle = gradient;
         } else {
           // Normal grass background
           ctx.fillStyle = "#228B22"; // Forest green color for grass
@@ -3732,7 +3816,14 @@ const canvas = document.getElementById("gameCanvas");
         if (desertSceneActive) {
           ctx.fillStyle = "#CD853F"; // Desert road color (sandy brown)
         } else if (winterSceneActive && winterFogActive) {
-          ctx.fillStyle = "#FAFAFA"; // Winter road color (white)
+          // Seasonal road colors
+          if (currentSeasonPhase === 'winter') {
+            ctx.fillStyle = "#FAFAFA"; // Winter road color (white)
+          } else if (currentSeasonPhase === 'spring') {
+            ctx.fillStyle = "#8B4513"; // Spring/Autumn road color (saddle brown)
+          } else if (currentSeasonPhase === 'summer') {
+            ctx.fillStyle = "#708090"; // Summer road color (slate gray)
+          }
         } else {
           ctx.fillStyle = "gray"; // Normal road color
         }
@@ -4281,6 +4372,68 @@ const canvas = document.getElementById("gameCanvas");
                   collectible.height
                 );
               }
+            } else if (collectible.type === 'wrench') {
+              // Draw wrench (spring collectible with 15 points) with gold glow
+              
+              // Create gold glow effect
+              const glowRadius = Math.max(collectible.width, collectible.height) / 2 + 12;
+              const glowCenterX = collectible.x + collectible.width / 2;
+              const glowCenterY = collectible.y + collectible.height / 2;
+              
+              // Outer gold glow
+              const outerGlow = ctx.createRadialGradient(
+                glowCenterX, glowCenterY, 0,
+                glowCenterX, glowCenterY, glowRadius
+              );
+              outerGlow.addColorStop(0, 'rgba(255, 215, 0, 0.6)'); // Gold
+              outerGlow.addColorStop(0.7, 'rgba(255, 215, 0, 0.3)');
+              outerGlow.addColorStop(1, 'rgba(255, 215, 0, 0)');
+              
+              ctx.fillStyle = outerGlow;
+              ctx.beginPath();
+              ctx.arc(glowCenterX, glowCenterY, glowRadius, 0, 2 * Math.PI);
+              ctx.fill();
+              
+              // Inner bright glow
+              const innerGlow = ctx.createRadialGradient(
+                glowCenterX, glowCenterY, 0,
+                glowCenterX, glowCenterY, glowRadius * 0.6
+              );
+              innerGlow.addColorStop(0, 'rgba(255, 255, 0, 0.4)'); // Bright yellow
+              innerGlow.addColorStop(1, 'rgba(255, 255, 0, 0)');
+              
+              ctx.fillStyle = innerGlow;
+              ctx.beginPath();
+              ctx.arc(glowCenterX, glowCenterY, glowRadius * 0.6, 0, 2 * Math.PI);
+              ctx.fill();
+              
+              if (wrenchImageLoaded) {
+                ctx.drawImage(
+                  wrenchImage,
+                  collectible.x,
+                  collectible.y,
+                  collectible.width,
+                  collectible.height
+                );
+              } else {
+                // Fallback for wrench: silver tool shape
+                ctx.fillStyle = "#C0C0C0"; // Silver color
+                ctx.fillRect(
+                  collectible.x,
+                  collectible.y,
+                  collectible.width,
+                  collectible.height
+                );
+                // Add some detail lines
+                ctx.strokeStyle = "#A0A0A0";
+                ctx.lineWidth = 2;
+                ctx.strokeRect(
+                  collectible.x,
+                  collectible.y,
+                  collectible.width,
+                  collectible.height
+                );
+              }
             } else {
               // Draw oil lamp (default)
               if (collectibleImageLoaded) {
@@ -4683,12 +4836,20 @@ const canvas = document.getElementById("gameCanvas");
                   yRange) +
                 yOffset;
 
-              // Winter fog particle (light blue-white)
+              // Seasonal fog particles
               const particleRadius = (isMobile() || isTablet()) ? 15 + layer * 3 : 12 + layer * 2.5;
               
               const gradient = ctx.createRadialGradient(x, y, 0, x, y, particleRadius);
-              gradient.addColorStop(0, 'rgba(245, 248, 255, 0.3)'); // Light blue-white center
-              gradient.addColorStop(1, 'rgba(220, 235, 250, 0)'); // Transparent edges
+              if (currentSeasonPhase === 'winter') {
+                gradient.addColorStop(0, 'rgba(245, 248, 255, 0.3)'); // Light blue-white center
+                gradient.addColorStop(1, 'rgba(220, 235, 250, 0)'); // Transparent edges
+              } else if (currentSeasonPhase === 'spring') {
+                gradient.addColorStop(0, 'rgba(255, 215, 170, 0.3)'); // Orange-tinted center
+                gradient.addColorStop(1, 'rgba(255, 200, 150, 0)'); // Transparent edges
+              } else if (currentSeasonPhase === 'summer') {
+                gradient.addColorStop(0, 'rgba(200, 255, 200, 0.3)'); // Green-tinted center
+                gradient.addColorStop(1, 'rgba(180, 255, 180, 0)'); // Transparent edges
+              }
               
               ctx.fillStyle = gradient;
               ctx.fillRect(
@@ -4700,8 +4861,14 @@ const canvas = document.getElementById("gameCanvas");
             }
           }
 
-          // Add light winter fog overlay (blue-tinted)
-          ctx.fillStyle = `rgba(240, 245, 255, ${fogOpacity * 0.2})`;
+          // Add light seasonal fog overlay
+          if (currentSeasonPhase === 'winter') {
+            ctx.fillStyle = `rgba(240, 245, 255, ${fogOpacity * 0.2})`; // Blue-tinted
+          } else if (currentSeasonPhase === 'spring') {
+            ctx.fillStyle = `rgba(255, 220, 180, ${fogOpacity * 0.2})`; // Orange-tinted
+          } else if (currentSeasonPhase === 'summer') {
+            ctx.fillStyle = `rgba(220, 255, 220, ${fogOpacity * 0.2})`; // Green-tinted
+          }
           ctx.fillRect(0, 0, canvas.width, canvas.height);
 
           // Reset global alpha
