@@ -417,6 +417,9 @@ const canvas = document.getElementById("gameCanvas");
       const desertSceneDuration = 8000; // 8 seconds in milliseconds
       let desertSoundStarted = false;
       let firstRadarCompleted = false;
+      let firstRadarCollected = false; // Track if first radar has been collected
+      let missedRadarAttempts = 0; // Count mist cycles where radar wasn't collected
+      const maxMissedRadarAttempts = 3; // Trigger desert scene after 3 missed attempts
       let preDesertTrackSpeed = 600; // Will be updated to current speed when desert scene starts
       let preDesertPlayerSpeed = 700; // Will be updated to current speed when desert scene starts
       
@@ -1454,8 +1457,8 @@ const canvas = document.getElementById("gameCanvas");
         let isRadar = false;
         let type = 'oil';
         
-        if (mistActive && !radarSpawnedThisMist && !radarActive) {
-          // During mist, spawn radar (only once per mist and when radar is not already active)
+        if (mistActive && !radarSpawnedThisMist && !radarActive && !firstRadarCollected) {
+          // During mist, spawn radar until first one is collected
           isRadar = true;
           type = 'radar';
           radarSpawnedThisMist = true; // Mark that radar has been spawned for this mist
@@ -1607,6 +1610,8 @@ const canvas = document.getElementById("gameCanvas");
         desertSceneTimer = 0;
         desertSoundStarted = false;
         firstRadarCompleted = false;
+        firstRadarCollected = false;
+        missedRadarAttempts = 0;
         preDesertTrackSpeed = BASE_TRACK_SPEED;
         preDesertPlayerSpeed = BASE_PLAYER_SPEED;
         
@@ -1898,6 +1903,7 @@ const canvas = document.getElementById("gameCanvas");
               // Radar collected - activate green radar screen and clear mist
               radarActive = true;
               radarTimer = radarDuration;
+              firstRadarCollected = true; // Mark first radar as collected
               mistActive = false;
               mistTimer = 0;
               showMistMessage = false;
@@ -2126,6 +2132,13 @@ const canvas = document.getElementById("gameCanvas");
           mistTimer -= deltaTime;
           if (mistTimer <= 0) {
             mistActive = false;
+            
+            // If radar wasn't collected during this mist, increment missed attempts counter
+            if (!firstRadarCollected) {
+              missedRadarAttempts++;
+              console.log(`Mist ended without radar collection - missed attempts: ${missedRadarAttempts}/${maxMissedRadarAttempts}`);
+            }
+            
             radarSpawnedThisMist = false; // Reset flag when mist ends naturally
             // Remove mist-active class to hide radar
             document.body.classList.remove("mist-active");
@@ -2216,6 +2229,47 @@ const canvas = document.getElementById("gameCanvas");
           }
         }
 
+        // Alternative desert scene trigger - if player missed too many radar attempts
+        if (!firstRadarCompleted && !desertSceneActive && missedRadarAttempts >= maxMissedRadarAttempts) {
+          console.log(`🏜️ Alternative desert scene trigger - player missed ${missedRadarAttempts} radar attempts`);
+          firstRadarCompleted = true; // Mark as completed to prevent future triggers
+          firstRadarCollected = true; // Also mark as collected to prevent further radar spawning
+          
+          // Trigger desert scene
+          desertSceneActive = true;
+          desertSceneTimer = desertSceneDuration;
+          desertSoundStarted = false;
+          
+          // Store current speeds before resetting to base speeds
+          preDesertTrackSpeed = currentTrackSpeed;
+          preDesertPlayerSpeed = currentPlayerSpeed;
+          
+          // Reset speeds to base (starting game) speeds during desert scene
+          currentTrackSpeed = BASE_TRACK_SPEED;
+          currentPlayerSpeed = BASE_PLAYER_SPEED;
+          player.speedX = BASE_PLAYER_SPEED;
+          player.speedY = BASE_PLAYER_SPEED;
+          
+          // Clear normal obstacles to show only desert obstacles (palms/camels)
+          obstacles.length = 0;
+          sideObstacles.length = 0;
+          
+          console.log('🏜️ ALTERNATIVE DESERT SCENE ACTIVATED - helping player progress');
+          
+          // Trigger desert scene message
+          showDesertMessage = true;
+          desertMessageTimer = desertMessageDuration;
+          console.log('🏜️ Desert message triggered: "Her væra like stille som den ørken"');
+          
+          // Stop background music immediately but delay desert sound
+          try {
+            backgroundMusic.stop();
+            console.log('🏜️ Alternative desert scene activated - background music stopped');
+          } catch (e) {
+            console.warn('Error stopping background music for alternative desert scene:', e);
+          }
+        }
+
         // Update desert scene timer
         if (desertSceneActive) {
           desertSceneTimer -= deltaTime;
@@ -2276,8 +2330,8 @@ const canvas = document.getElementById("gameCanvas");
             // Enable time-based mist system after first desert scene completion
             if (!mistTimeBased) {
               mistTimeBased = true;
-              lastMistTime = gameTime; // Initialize timer for next mist
-              console.log('Desert scene completed - switching to time-based mist system (every 8 seconds)');
+              lastMistTime = gameTime - mistTimeInterval; // Set timer so mist triggers immediately
+              console.log('Desert scene completed - switching to time-based mist system (mist will start immediately, then every 8 seconds)');
             }
             
             // Clear desert obstacles
@@ -3115,7 +3169,6 @@ const canvas = document.getElementById("gameCanvas");
         // Draw mist overlay if active
         if (mistActive) {
           // Calculate mist opacity based on remaining time
-          const mistProgress = 1 - mistTimer / mistDuration;
           let mistOpacity;
 
           // Fade in for first 1 second, full opacity for 6 seconds, fade out for last 1 second
