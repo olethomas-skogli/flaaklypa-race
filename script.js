@@ -356,6 +356,30 @@ const canvas = document.getElementById("gameCanvas");
         console.error("Failed to load tree image");
       };
 
+      // Load snow image for winter scene obstacles
+      const snowImage = new Image();
+      snowImage.src = "snow.png";
+      let snowImageLoaded = false;
+      snowImage.onload = () => {
+        snowImageLoaded = true;
+        console.log("Snow image loaded successfully");
+      };
+      snowImage.onerror = () => {
+        console.error("Failed to load snow image");
+      };
+
+      // Load kjelke image for winter scene collectibles
+      const kjelkeImage = new Image();
+      kjelkeImage.src = "kjelke.png";
+      let kjelkeImageLoaded = false;
+      kjelkeImage.onload = () => {
+        kjelkeImageLoaded = true;
+        console.log("Kjelke image loaded successfully");
+      };
+      kjelkeImage.onerror = () => {
+        console.error("Failed to load kjelke image");
+      };
+
       let isMoving = false;
 
       // Game state
@@ -431,6 +455,7 @@ const canvas = document.getElementById("gameCanvas");
       const desertObstacles = [];
       const desertObstacleFrequency = 750; // 2x more frequent than regular (1500/2)
       let lastDesertObstacleTime = 0;
+      let desertDesperadosCount = 0; // Track desperados spawned in current desert scene (max 2)
       
       // Desert collectible spawning variables (more frequent due to gold bars)
       const desertCollectibleFrequency = 1200; // More frequent to accommodate gold bars (1500ms -> 1200ms)
@@ -440,6 +465,33 @@ const canvas = document.getElementById("gameCanvas");
       const desertSideObstacles = [];
       const desertSideObstacleFrequency = 600; // Frequent spawning for immersive desert experience
       let lastDesertSideObstacleTime = 0;
+      
+      // Winter scene variables
+      let winterSceneActive = false;
+      let winterSceneTimer = 0;
+      const winterSceneDuration = 12000; // 12 seconds in milliseconds
+      const winterVisualDelay = 5000; // 5 seconds delay before winter visuals appear
+      let winterSoundStarted = false;
+      let firstWinterCompleted = false;
+      let preWinterTrackSpeed = 600; // Will be updated to current speed when winter scene starts
+      let preWinterPlayerSpeed = 700; // Will be updated to current speed when winter scene starts
+      
+      // Winter obstacle spawning variables
+      const winterObstacles = [];
+      const winterObstacleFrequency = 800; // Snow obstacles frequency
+      let lastWinterObstacleTime = 0;
+      
+      // Winter collectible spawning variables (kjelke with 15 points)
+      const winterCollectibleFrequency = 1800; // Kjelke spawning frequency
+      let lastWinterCollectibleTime = 0;
+      
+      // Winter side obstacle spawning variables (mountains)
+      const winterSideObstacles = [];
+      const winterSideObstacleFrequency = 700; // Mountain obstacles on sides
+      let lastWinterSideObstacleTime = 0;
+      
+      // Winter fog effect variables
+      let winterFogActive = false;
       
       // Solan car obstacle spawning counter
       let solanObstacleCounter = 0;
@@ -800,6 +852,55 @@ const canvas = document.getElementById("gameCanvas");
         return desertReady && aladdinReady;
       }
 
+      // Winter scene sound
+      let winterSound;
+      try {
+        winterSound = new Howl({
+          src: ["de-bygger-il-tempo.mp3"],
+          volume: 0.8, // Winter background music volume
+          loop: true, // Loop for continuous winter atmosphere
+          autoplay: false,
+          html5: false, // Use Web Audio for better timing precision
+          pool: 1,
+          preload: true,
+          onload: function() {
+            console.log('✅ Winter sound (de-bygger-il-tempo.mp3) loaded successfully');
+            console.log('🎵 Winter sound duration:', winterSound.duration(), 'seconds');
+          },
+          onloaderror: function(id, error) { 
+            console.error('❌ Winter sound failed to load:', error);
+          },
+          onplay: function() {
+            console.log('🔊 Winter sound started playing - volume 0.8');
+          },
+          onplayerror: function(id, error) { 
+            console.error('❌ Winter sound failed to play:', error); 
+          },
+          onstop: function() {
+            console.log('⏹️ Winter sound stopped');
+          },
+          onend: function() {
+            console.log('🔊 de-bygger-il-tempo.mp3 ended naturally (will loop)');
+          }
+        });
+      } catch (e) {
+        console.error('❌ Error creating winter sound:', e);
+        winterSound = {
+          play: () => console.warn('Winter sound fallback - no audio'),
+          stop: () => {},
+          state: () => 'unloaded',
+          playing: () => false,
+          duration: () => 0
+        };
+      }
+
+      // Function to check if winter sound is ready
+      function isWinterSoundReady() {
+        const winterReady = winterSound && winterSound.state() === 'loaded';
+        console.log('🎵 Winter sound ready check - Winter:', winterReady);
+        return winterReady;
+      }
+
       // Test sabotage sound function (for debugging)
       function testSabotageSound() {
         console.log('🧪 TESTING SABOTAGE SOUND');
@@ -939,9 +1040,52 @@ const canvas = document.getElementById("gameCanvas");
       console.log('🏆 Initializing leaderboard...');
       initializeLeaderboard();
 
-      // Mobile-specific functions
+      // Device detection functions with clean responsive breakpoints
+      function isTablet() {
+        const width = window.innerWidth;
+        const hasTouch = "ontouchstart" in window;
+        
+        // Tablet: 480px - 768px with touch support (adjusted for better mobile detection)
+        if (hasTouch && width >= 480 && width <= 768) {
+          console.log(`🎯 TABLET DETECTED: ${width}px - Responsive tablet range`);
+          return true;
+        }
+        
+        return false;
+      }
+      
       function isMobile() {
-        return window.innerWidth <= 768 || "ontouchstart" in window;
+        const width = window.innerWidth;
+        const hasTouch = "ontouchstart" in window;
+        
+        // Mobile/Smartphone: < 480px with touch support (includes 445px)
+        if (hasTouch && width < 480) {
+          console.log(`📱 MOBILE DETECTED: ${width}px - Smartphone range`);
+          return true;
+        }
+        
+        return false;
+      }
+      
+      function isDesktop() {
+        const width = window.innerWidth;
+        const hasTouch = "ontouchstart" in window;
+        
+        // Desktop: > 768px without touch, or any device without touch
+        return !hasTouch || width > 768;
+      }
+      
+      // Device-specific size multipliers for professional scaling
+      function getDeviceSizeMultiplier() {
+        if (isTablet()) return 1.5;
+        if (isMobile()) return 1.0;
+        return 1.0; // desktop
+      }
+      
+      function getObstacleSizeMultiplier() {
+        if (isTablet()) return 1.2; // Tablet: 20% larger obstacles
+        if (isMobile()) return 1.8; // Mobile/Smartphone: 80% larger for much better visibility
+        return 1.0; // Desktop: normal size
       }
 
       function resizeCanvas() {
@@ -1273,8 +1417,18 @@ const canvas = document.getElementById("gameCanvas");
 
       // Create an obstacle
       function createObstacle() {
-        let width = isMobile() ? 50 : 60;
-        let height = isMobile() ? 50 : 60;
+        // Responsive base sizes: Mobile=40, Tablet=80, Desktop=60
+        let width, height;
+        if (isTablet()) {
+          width = 80;
+          height = 80;
+        } else if (isMobile()) {
+          width = 40; // Perfect 40px base size for smartphones
+          height = 40;
+        } else {
+          width = 60; // Desktop
+          height = 60;
+        }
         
         // Determine obstacle type based on selected car
         let obstacleType = 'blodstrupmoen'; // default
@@ -1285,13 +1439,24 @@ const canvas = document.getElementById("gameCanvas");
             obstacleType = 'blodstrupmoen';
           } else {
             obstacleType = 'desperados';
-            // Make desperados obstacles wider
-            width = isMobile() ? 80 : 100;
+            // Make desperados obstacles wider based on device
+            if (isTablet()) {
+              width = 120; // Much larger base for tablets
+            } else if (isMobile()) {
+              width = 55; // Good size base for smartphones
+            } else {
+              width = 100; // Desktop
+            }
           }
         } else if (selectedCar === 'boomerang-rapido') {
           // Use reodor obstacles for Boomerang Rapido
           obstacleType = 'reodor';
         }
+        
+        // Apply tablet scaling (2x size for main track obstacles)
+        const obstacleSizeMultiplier = getObstacleSizeMultiplier();
+        width *= obstacleSizeMultiplier;
+        height *= obstacleSizeMultiplier;
         
         // Get current canvas display width
         const canvasDisplayWidth = canvas.getBoundingClientRect().width;
@@ -1351,21 +1516,54 @@ const canvas = document.getElementById("gameCanvas");
 
         // Helper function to create an element on a specific side
         function createElement(side, elementType) {
-          // Determine dimensions based on element type (made wider as requested)
+          // Determine dimensions based on element type (device-specific sizing)
           let width, height;
-          const safetyMargin = 15; // Increased margin for wider elements
+          const safetyMargin = 15;
+          let sideObstacleMultiplier;
+          if (isTablet()) {
+            sideObstacleMultiplier = 1.5; // 50% bigger on tablets
+          } else if (isMobile()) {
+            sideObstacleMultiplier = 0.88; // 10% larger than before (0.8 × 1.1) for better visibility
+          } else {
+            sideObstacleMultiplier = 1.0; // normal size on desktop
+          }
           
           if (elementType === 'mountain') {
-            width = isMobile() ? 80 : 120; // Wider than before
-            height = isMobile() ? 100 : 140;
+            // Responsive base sizes: Mobile, Tablet, Desktop
+            if (isMobile()) {
+              width = 60 * sideObstacleMultiplier;  // Smaller base for smartphones
+              height = 80 * sideObstacleMultiplier;
+            } else if (isTablet()) {
+              width = 100 * sideObstacleMultiplier; // Medium base for tablets  
+              height = 120 * sideObstacleMultiplier;
+            } else {
+              width = 120 * sideObstacleMultiplier; // Desktop
+              height = 140 * sideObstacleMultiplier;
+            }
           } else if (elementType === 'tree') {
-            width = isMobile() ? 70 : 90; // Wider than before
-            height = isMobile() ? 90 : 130;
+            if (isMobile()) {
+              width = 50 * sideObstacleMultiplier;  // Smaller base for smartphones
+              height = 70 * sideObstacleMultiplier;
+            } else if (isTablet()) {
+              width = 80 * sideObstacleMultiplier;  // Medium base for tablets
+              height = 110 * sideObstacleMultiplier;
+            } else {
+              width = 90 * sideObstacleMultiplier;  // Desktop
+              height = 130 * sideObstacleMultiplier;
+            }
           } else { // stand
-            width = isMobile() ? 40 : 85; // Keep width smaller to avoid track overlap
-            height = isMobile() ? 120 : 140; // Much taller base height
-            const widthMultiplier = isMobile() ? 1.5 : 2; // Apply multiplier only to width
-            const heightMultiplier = isMobile() ? 2 : 3; // Higher multiplier for height
+            if (isMobile()) {
+              width = 30 * sideObstacleMultiplier;  // Smaller base for smartphones
+              height = 100 * sideObstacleMultiplier;
+            } else if (isTablet()) {
+              width = 60 * sideObstacleMultiplier;  // Medium base for tablets
+              height = 130 * sideObstacleMultiplier;
+            } else {
+              width = 85 * sideObstacleMultiplier;  // Desktop
+              height = 140 * sideObstacleMultiplier;
+            }
+            const widthMultiplier = isMobile() ? 1.3 : (isTablet() ? 1.4 : 2);
+            const heightMultiplier = isMobile() ? 1.8 : (isTablet() ? 2.2 : 3);
             width *= widthMultiplier;
             height *= heightMultiplier;
           }
@@ -1570,28 +1768,69 @@ const canvas = document.getElementById("gameCanvas");
         // Get current canvas display width
         const canvasDisplayWidth = canvas.getBoundingClientRect().width;
         
-        // Randomly choose between palm, camel, and desperados (33% each)
+        // Choose obstacle type with desperados limit (max 2 per desert scene)
         const rand = Math.random();
         let type;
-        if (rand < 0.33) {
-          type = 'palm';
-        } else if (rand < 0.66) {
-          type = 'camel';
+        
+        if (desertDesperadosCount >= 2) {
+          // No more desperados allowed - only palm and camel (50% each)
+          if (rand < 0.5) {
+            type = 'palm';
+          } else {
+            type = 'camel';
+          }
         } else {
-          type = 'desperados';
+          // Normal distribution: palm, camel, desperados (33% each)
+          if (rand < 0.33) {
+            type = 'palm';
+          } else if (rand < 0.66) {
+            type = 'camel';
+          } else {
+            type = 'desperados';
+            desertDesperadosCount++; // Increment counter when desperados is selected
+          }
         }
         
         let width, height;
         if (type === 'palm') {
-          width = isMobile() ? 60 : 80;
-          height = isMobile() ? 90 : 120;
+          if (isTablet()) {
+            width = 80;    // Same as desktop size
+            height = 120;
+          } else if (isMobile()) {
+            width = 50;    // 10% larger (45 × 1.1) for better visibility
+            height = 77;   // 10% larger (70 × 1.1) for better visibility
+          } else {
+            width = 80;    // Desktop
+            height = 120;
+          }
         } else if (type === 'camel') {
-          width = isMobile() ? 70 : 90;
-          height = isMobile() ? 50 : 70;
+          if (isTablet()) {
+            width = 90;    // Same as desktop size
+            height = 70;
+          } else if (isMobile()) {
+            width = 55;    // 10% larger (50 × 1.1) for better visibility
+            height = 39;   // 10% larger (35 × 1.1) for better visibility
+          } else {
+            width = 90;    // Desktop
+            height = 70;
+          }
         } else { // desperados
-          width = isMobile() ? 90 : 110;  // Wider for better visual appearance
-          height = isMobile() ? 70 : 80;  // Shorter for better visual appearance
+          if (isTablet()) {
+            width = 110;   // Same as desktop size
+            height = 80;
+          } else if (isMobile()) {
+            width = 60;    // Better proportioned base for smartphones
+            height = 50;
+          } else {
+            width = 110;   // Desktop
+            height = 80;
+          }
         }
+        
+        // Apply tablet scaling (2x size for desert track obstacles)
+        const obstacleSizeMultiplier = getObstacleSizeMultiplier();
+        width *= obstacleSizeMultiplier;
+        height *= obstacleSizeMultiplier;
         
         // Spawn within track boundaries (mobile: 70%, desktop: 50%)
         const trackWidthRatio = isMobile() ? 0.7 : 0.5;
@@ -1626,15 +1865,48 @@ const canvas = document.getElementById("gameCanvas");
           }
           
           let width, height;
+          let sideObstacleMultiplier;
+          if (isTablet()) {
+            sideObstacleMultiplier = 1.5; // 50% bigger on tablets
+          } else if (isMobile()) {
+            sideObstacleMultiplier = 0.88; // 10% larger than before (0.8 × 1.1) for better visibility
+          } else {
+            sideObstacleMultiplier = 1.0; // normal size on desktop
+          }
+          
           if (type === 'palm') {
-            width = isMobile() ? 50 : 70;  // Slightly smaller for sides
-            height = isMobile() ? 80 : 100;
+            if (isMobile()) {
+              width = 40 * sideObstacleMultiplier;  // Smaller base for smartphones
+              height = 65 * sideObstacleMultiplier;
+            } else if (isTablet()) {
+              width = 60 * sideObstacleMultiplier;  // Medium base for tablets
+              height = 90 * sideObstacleMultiplier;
+            } else {
+              width = 70 * sideObstacleMultiplier;  // Desktop
+              height = 100 * sideObstacleMultiplier;
+            }
           } else if (type === 'camel') {
-            width = isMobile() ? 60 : 80;
-            height = isMobile() ? 40 : 60;
+            if (isMobile()) {
+              width = 45 * sideObstacleMultiplier;  // Smaller base for smartphones
+              height = 30 * sideObstacleMultiplier;
+            } else if (isTablet()) {
+              width = 70 * sideObstacleMultiplier;  // Medium base for tablets
+              height = 50 * sideObstacleMultiplier;
+            } else {
+              width = 80 * sideObstacleMultiplier;  // Desktop
+              height = 60 * sideObstacleMultiplier;
+            }
           } else { // desperados
-            width = isMobile() ? 70 : 90;
-            height = isMobile() ? 70 : 90;
+            if (isMobile()) {
+              width = 55 * sideObstacleMultiplier;  // Smaller base for smartphones
+              height = 55 * sideObstacleMultiplier;
+            } else if (isTablet()) {
+              width = 80 * sideObstacleMultiplier;  // Medium base for tablets
+              height = 80 * sideObstacleMultiplier;
+            } else {
+              width = 90 * sideObstacleMultiplier;  // Desktop
+              height = 90 * sideObstacleMultiplier;
+            }
           }
           
           let x;
@@ -1650,6 +1922,116 @@ const canvas = document.getElementById("gameCanvas");
         }
       }
 
+      // Create a winter obstacle (snow)
+      function createWinterObstacle() {
+        // Get current canvas display width
+        const canvasDisplayWidth = canvas.getBoundingClientRect().width;
+        
+        // Winter obstacles are snow - simple single type
+        const type = 'snow';
+        
+        let width, height;
+        // Snow obstacle sizes
+        if (isTablet()) {
+          width = 70;    // Tablet size
+          height = 70;
+        } else if (isMobile()) {
+          width = 45;    // Mobile size
+          height = 45;
+        } else {
+          width = 60;    // Desktop size
+          height = 60;
+        }
+        
+        // Apply tablet scaling
+        const obstacleSizeMultiplier = getObstacleSizeMultiplier();
+        width *= obstacleSizeMultiplier;
+        height *= obstacleSizeMultiplier;
+        
+        // Spawn within track boundaries (mobile: 70%, desktop: 50%)
+        const trackWidthRatio = isMobile() ? 0.7 : 0.5;
+        const trackLeft = canvasDisplayWidth * (1 - trackWidthRatio) / 2;
+        const trackWidth = canvasDisplayWidth * trackWidthRatio;
+        const x = trackLeft + Math.random() * (trackWidth - width);
+        
+        winterObstacles.push({ x, y: -50, width, height, type });
+      }
+
+      // Create winter side obstacles (mountains)
+      function createWinterSideObstacles() {
+        // Get current canvas display width
+        const canvasDisplayWidth = canvas.getBoundingClientRect().width;
+        
+        // Calculate track boundaries to position obstacles on sides
+        const trackWidthRatio = isMobile() ? 0.7 : 0.5;
+        const trackLeft = canvasDisplayWidth * (1 - trackWidthRatio) / 2;
+        const trackRight = trackLeft + (canvasDisplayWidth * trackWidthRatio);
+        
+        // Create mountain obstacles for both sides
+        for (let side of ['left', 'right']) {
+          // Winter side obstacles are always mountains
+          const type = 'mountain';
+          
+          let width, height;
+          let sideObstacleMultiplier;
+          if (isTablet()) {
+            sideObstacleMultiplier = 1.5; // 50% bigger on tablets
+          } else if (isMobile()) {
+            sideObstacleMultiplier = 0.9; // Good size for mobile
+          } else {
+            sideObstacleMultiplier = 1.2; // Slightly bigger on desktop
+          }
+          
+          // Mountain obstacle sizes
+          if (isMobile()) {
+            width = 50 * sideObstacleMultiplier;  // Base for smartphones
+            height = 75 * sideObstacleMultiplier;
+          } else if (isTablet()) {
+            width = 70 * sideObstacleMultiplier;  // Medium base for tablets
+            height = 100 * sideObstacleMultiplier;
+          } else {
+            width = 80 * sideObstacleMultiplier;  // Desktop
+            height = 110 * sideObstacleMultiplier;
+          }
+          
+          let x;
+          const safetyMargin = 10; // Margin from track edge
+          
+          if (side === 'left') {
+            // Place on left side with margin
+            const availableSpace = trackLeft - safetyMargin - width;
+            x = availableSpace > 0 ? Math.random() * availableSpace : safetyMargin;
+          } else {
+            // Place on right side with margin
+            const availableSpace = canvasDisplayWidth - trackRight - width - safetyMargin;
+            x = availableSpace > 0 ? trackRight + safetyMargin + Math.random() * availableSpace : trackRight + safetyMargin;
+          }
+          
+          winterSideObstacles.push({ x, y: -50, width, height, type, side });
+        }
+      }
+
+      // Create a winter collectible (kjelke with 15 points)
+      function createWinterCollectible() {
+        const width = isMobile() ? 50 : 65;
+        const height = isMobile() ? 40 : 45;
+        
+        // Get current canvas display width
+        const canvasDisplayWidth = canvas.getBoundingClientRect().width;
+        
+        // Spawn within track boundaries (mobile: 70%, desktop: 50%)
+        const trackWidthRatio = isMobile() ? 0.7 : 0.5;
+        const trackLeft = canvasDisplayWidth * (1 - trackWidthRatio) / 2;
+        const trackWidth = canvasDisplayWidth * trackWidthRatio;
+        const x = trackLeft + Math.random() * (trackWidth - width);
+        
+        // Winter collectibles are always kjelke with 15 points
+        const type = 'kjelke';
+        const points = 15;
+        
+        collectibles.push({ x, y: -50, width, height, type, points });
+      }
+
       // Reset the game state
       function resetGame() {
         score = 0;
@@ -1661,6 +2043,9 @@ const canvas = document.getElementById("gameCanvas");
         lastSideObstacleTime = 0;
         lastDesertObstacleTime = 0;
         lastDesertCollectibleTime = 0;
+        lastWinterObstacleTime = 0;
+        lastWinterCollectibleTime = 0;
+        lastWinterSideObstacleTime = 0;
         showMessage = false;
         messageTimer = 0;
         showRadarHint = false;
@@ -1671,6 +2056,8 @@ const canvas = document.getElementById("gameCanvas");
         collectibles.length = 0;
         desertObstacles.length = 0;
         desertSideObstacles.length = 0;
+        winterObstacles.length = 0;
+        winterSideObstacles.length = 0;
 
         // Reset player size and position for current device
         if (selectedCar === 'solan-propell-sykkel') {
@@ -1744,6 +2131,15 @@ const canvas = document.getElementById("gameCanvas");
         missedRadarAttempts = 0;
         preDesertTrackSpeed = BASE_TRACK_SPEED;
         preDesertPlayerSpeed = BASE_PLAYER_SPEED;
+        
+        // Reset winter scene variables
+        winterSceneActive = false;
+        winterSceneTimer = 0;
+        winterSoundStarted = false;
+        firstWinterCompleted = false;
+        preWinterTrackSpeed = BASE_TRACK_SPEED;
+        preWinterPlayerSpeed = BASE_PLAYER_SPEED;
+        winterFogActive = false;
         
         // Reset Solan obstacle counter
         solanObstacleCounter = 0;
@@ -1869,6 +2265,16 @@ const canvas = document.getElementById("gameCanvas");
             console.warn('Error stopping aladdin oil sound on game over:', e);
           }
 
+          // Stop winter sounds if game over occurs during winter scene
+          try {
+            if (winterSound && typeof winterSound.stop === 'function') {
+              winterSound.stop();
+              console.log('Stopped winter sound - game over');
+            }
+          } catch (e) {
+            console.warn('Error stopping winter sound on game over:', e);
+          }
+
           // Remove game-active and mist-active classes, add game-over class
           document.body.classList.remove("game-active", "mist-active");
           document.body.classList.add("game-over");
@@ -1932,15 +2338,16 @@ const canvas = document.getElementById("gameCanvas");
         trackY += currentTrackSpeed * (deltaTime / 1000);
         if (trackY >= canvas.height) trackY = 0;
 
-        // Create obstacles (pause spawning during desert scene)
-        if (!desertSceneActive && timestamp - lastObstacleTime > obstacleFrequency) {
+        // Create obstacles (pause spawning during desert scene and winter transition period only)
+        if (!desertSceneActive && !(winterSceneActive && !winterFogActive) && timestamp - lastObstacleTime > obstacleFrequency) {
           createObstacle();
           lastObstacleTime = timestamp;
         }
 
         // Create collectibles (normal gameplay) - 3x more frequent during Ludvig effect
+        // Pause during desert scene and winter transition period only
         const currentCollectibleFrequency = ludvigActive ? collectibleFrequency / 3 : collectibleFrequency;
-        if (!desertSceneActive && timestamp - lastCollectibleTime > currentCollectibleFrequency) {
+        if (!desertSceneActive && !(winterSceneActive && !winterFogActive) && timestamp - lastCollectibleTime > currentCollectibleFrequency) {
           createCollectible();
           lastCollectibleTime = timestamp;
         }
@@ -1951,8 +2358,8 @@ const canvas = document.getElementById("gameCanvas");
           lastDesertCollectibleTime = timestamp;
         }
 
-        // Create side elements with alternating patterns (pause spawning during desert scene)
-        if (!desertSceneActive && timestamp - lastSideObstacleTime > sideObstacleFrequency) {
+        // Create side elements with alternating patterns (pause spawning during desert scene and winter transition period only)
+        if (!desertSceneActive && !(winterSceneActive && !winterFogActive) && timestamp - lastSideObstacleTime > sideObstacleFrequency) {
           createSideElements();
           lastSideObstacleTime = timestamp;
         }
@@ -1967,6 +2374,24 @@ const canvas = document.getElementById("gameCanvas");
         if (desertSceneActive && timestamp - lastDesertSideObstacleTime > desertSideObstacleFrequency) {
           createDesertSideObstacles();
           lastDesertSideObstacleTime = timestamp;
+        }
+
+        // Create winter obstacles (only after visual delay)
+        if (winterSceneActive && winterFogActive && timestamp - lastWinterObstacleTime > winterObstacleFrequency) {
+          createWinterObstacle();
+          lastWinterObstacleTime = timestamp;
+        }
+
+        // Create winter collectibles (only after visual delay)
+        if (winterSceneActive && winterFogActive && timestamp - lastWinterCollectibleTime > winterCollectibleFrequency) {
+          createWinterCollectible();
+          lastWinterCollectibleTime = timestamp;
+        }
+
+        // Create winter side obstacles (only after visual delay)
+        if (winterSceneActive && winterFogActive && timestamp - lastWinterSideObstacleTime > winterSideObstacleFrequency) {
+          createWinterSideObstacles();
+          lastWinterSideObstacleTime = timestamp;
         }
 
         // Update obstacles (freeze movement during desert scene)
@@ -2038,6 +2463,30 @@ const canvas = document.getElementById("gameCanvas");
           }
         }
 
+        // Update winter obstacles (only move during winter scene)
+        if (winterSceneActive) {
+          winterObstacles.forEach((obstacle) => {
+            obstacle.y += currentTrackSpeed * (deltaTime / 1000);
+          });
+          // Remove off-screen winter obstacles
+          for (let i = winterObstacles.length - 1; i >= 0; i--) {
+            if (winterObstacles[i].y > canvas.height + winterObstacles[i].height) {
+              winterObstacles.splice(i, 1);
+            }
+          }
+          
+          // Update winter side obstacles
+          winterSideObstacles.forEach((obstacle) => {
+            obstacle.y += currentTrackSpeed * (deltaTime / 1000);
+          });
+          // Remove off-screen winter side obstacles
+          for (let i = winterSideObstacles.length - 1; i >= 0; i--) {
+            if (winterSideObstacles[i].y > canvas.height + winterSideObstacles[i].height) {
+              winterSideObstacles.splice(i, 1);
+            }
+          }
+        }
+
         // Collectible collision detection
         collectibles.forEach((collectible, index) => {
           if (
@@ -2101,6 +2550,8 @@ const canvas = document.getElementById("gameCanvas");
               let points = 10; // default for oil lamps
               if (collectible.type === 'gold') {
                 points = 20; // gold bars give 20 points
+              } else if (collectible.type === 'kjelke') {
+                points = 15; // kjelke gives 15 points
               }
               
               // Apply Ludvig 2x multiplier if active
@@ -2206,8 +2657,8 @@ const canvas = document.getElementById("gameCanvas");
         let shouldTriggerMist = false;
         
         if (!mistTimeBased) {
-          // Score-based system: first mist at exactly 50 points only
-          if (score === 50 && lastMistScore < 50) {
+          // Score-based system: first mist at 50 points or higher
+          if (score >= 50 && lastMistScore < 50) {
             shouldTriggerMist = true;
             lastMistScore = score;
           }
@@ -2350,6 +2801,7 @@ const canvas = document.getElementById("gameCanvas");
               desertSceneActive = true;
               desertSceneTimer = desertSceneDuration;
               desertSoundStarted = false;
+              desertDesperadosCount = 0; // Reset desperados counter for new desert scene
               
               // Store current speeds before resetting to base speeds
               preDesertTrackSpeed = currentTrackSpeed;
@@ -2395,6 +2847,7 @@ const canvas = document.getElementById("gameCanvas");
           desertSceneActive = true;
           desertSceneTimer = desertSceneDuration;
           desertSoundStarted = false;
+          desertDesperadosCount = 0; // Reset desperados counter for new desert scene
           
           // Store current speeds before resetting to base speeds
           preDesertTrackSpeed = currentTrackSpeed;
@@ -2562,6 +3015,136 @@ const canvas = document.getElementById("gameCanvas");
               } catch (fallbackError) {
                 console.error('❌ Fallback failed starting background music:', fallbackError);
               }
+            }
+          }
+        }
+
+        // Check for winter scene trigger - after desert completed and first radar/mist cycle ended
+        // Alternative trigger: 36 seconds and 180 points reached
+        if (!winterSceneActive && !firstWinterCompleted) {
+          let shouldTriggerWinter = false;
+          
+          // Primary trigger: after desert scene completion AND not in mist/radar
+          if (firstRadarCompleted && !mistActive && !radarActive && !desertSceneActive) {
+            shouldTriggerWinter = true;
+            console.log('❄️ Winter scene trigger - Primary: after desert completion, no mist/radar active');
+          }
+          
+          // Alternative trigger: 36 seconds + 180 points
+          if (gameTime >= 36000 && score >= 180) { // 36 seconds = 36000ms
+            shouldTriggerWinter = true;
+            console.log('❄️ Winter scene trigger - Alternative: 36 seconds + 180 points reached');
+          }
+          
+          if (shouldTriggerWinter) {
+            winterSceneActive = true;
+            winterSceneTimer = winterSceneDuration + winterVisualDelay; // Add delay to total duration
+            winterSoundStarted = false;
+            winterFogActive = false; // Don't activate fog immediately - wait for delay
+            firstWinterCompleted = true; // Mark as completed to prevent future triggers
+            
+            // Store current speeds before resetting to base speeds
+            preWinterTrackSpeed = currentTrackSpeed;
+            preWinterPlayerSpeed = currentPlayerSpeed;
+            
+            // Reset speeds to base speeds during winter scene
+            currentTrackSpeed = BASE_TRACK_SPEED;
+            currentPlayerSpeed = BASE_PLAYER_SPEED;
+            player.speedX = BASE_PLAYER_SPEED;
+            player.speedY = BASE_PLAYER_SPEED;
+            
+            // Normal obstacles continue during winter scene (not cleared)
+            
+            console.log('❄️ WINTER SCENE ACTIVATED - Speeds reset to base values, normal obstacles continue');
+            
+            // Stop current background music and mist sounds immediately
+            try {
+              if (backgroundMusic && backgroundMusic.playing()) {
+                backgroundMusic.stop();
+                console.log('❄️ Background music stopped immediately for winter scene');
+              }
+              if (radarSound && radarSound.playing()) {
+                radarSound.stop();
+                console.log('❄️ Radar sound stopped for winter scene');
+              }
+            } catch (e) {
+              console.warn('Error stopping sounds for winter scene:', e);
+            }
+            
+            // Start winter music immediately when scene begins
+            winterSoundStarted = true; // Mark as started
+            try {
+              if (winterSound && winterSound.state() === 'loaded') {
+                winterSound.play();
+                console.log('❄️ Winter music started immediately');
+              } else {
+                console.warn('⚠️ Winter sound not ready, state:', winterSound ? winterSound.state() : 'undefined');
+                winterSound && winterSound.play();
+              }
+            } catch (e) {
+              console.error('❌ Error starting winter music immediately:', e);
+            }
+          }
+        }
+
+        // Update winter scene timer
+        if (winterSceneActive) {
+          winterSceneTimer -= deltaTime;
+          
+          // Activate winter visual effects after 5-second delay
+          if (!winterFogActive && winterSceneTimer <= winterSceneDuration) {
+            winterFogActive = true; // Activate fog and visual effects after delay
+            
+            // Keep speeds at base level during winter (let normal speed progression resume)
+            // Speeds remain at base values set when winter scene started
+            // This allows natural game speed increases to resume from the beginning
+            
+            console.log('❄️ Winter visual effects activated - speeds remain at start level, natural progression resumes');
+          }
+          
+          // Winter sound is now started immediately when scene begins (no delay)
+          
+          if (winterSceneTimer <= 0) {
+            winterSceneActive = false;
+            winterFogActive = false; // Deactivate fog effect
+            
+            // Clear winter obstacles
+            winterObstacles.length = 0;
+            winterSideObstacles.length = 0;
+            
+            // Keep current speeds that have naturally progressed during winter scene
+            // Don't restore pre-winter speeds - let natural progression continue
+            player.speedX = currentPlayerSpeed;
+            player.speedY = currentPlayerSpeed;
+            
+            console.log('❄️ Winter scene ended - speeds continue natural progression from winter levels');
+            
+            // Stop winter sound and restore background music
+            try {
+              if (winterSound && winterSound.playing()) {
+                winterSound.stop();
+                console.log('⏹️ Winter sound stopped');
+              }
+              
+              // Resume background music
+              if (backgroundMusic && backgroundMusic.state() === 'loaded') {
+                backgroundMusic.play();
+                console.log('🎵 Background music resumed after winter scene');
+              } else {
+                console.warn('⚠️ Background music not ready, attempting to load and play');
+                if (backgroundMusic) {
+                  backgroundMusic.once('load', () => {
+                    backgroundMusic.play();
+                    console.log('🎵 Background music started after loading');
+                  });
+                  backgroundMusic.load();
+                  backgroundMusic.play();
+                }
+              }
+              
+              console.log('❄️ Winter scene ended - all audio restored');
+            } catch (e) {
+              console.error('❌ Error restoring audio after winter scene:', e);
             }
           }
         }
@@ -2893,6 +3476,113 @@ const canvas = document.getElementById("gameCanvas");
           });
         }
 
+        // Winter obstacle collision detection (only during winter scene)
+        if (winterSceneActive) {
+          // Winter main obstacles (snow)
+          winterObstacles.forEach((obstacle) => {
+            // Standard collision for winter obstacles
+            let collisionReduction = 0.3; // More forgiving than regular obstacles
+            
+            // More forgiving collision on mobile
+            if (isMobile()) {
+              collisionReduction = 0.4;
+            }
+            
+            // Extra forgiving for Solan car
+            if (selectedCar === 'solan-propell-sykkel') {
+              collisionReduction = 0.5;
+            }
+            
+            const obstacleCollisionX = obstacle.x + (obstacle.width * collisionReduction / 2);
+            const obstacleCollisionY = obstacle.y + (obstacle.height * collisionReduction / 2);
+            const obstacleCollisionWidth = obstacle.width * (1 - collisionReduction);
+            const obstacleCollisionHeight = obstacle.height * (1 - collisionReduction);
+            
+            // Adjust player collision area based on car type
+            let playerCollisionReduction = 0.2;
+            if (selectedCar === 'solan-propell-sykkel') {
+              playerCollisionReduction = 0.35;
+            }
+            
+            const playerCollisionX = player.x + (player.width * playerCollisionReduction / 2);
+            const playerCollisionY = player.y + (player.height * playerCollisionReduction / 2);
+            const playerCollisionWidth = player.width * (1 - playerCollisionReduction);
+            const playerCollisionHeight = player.height * (1 - playerCollisionReduction);
+            
+            if (
+              playerCollisionX < obstacleCollisionX + obstacleCollisionWidth &&
+              playerCollisionX + playerCollisionWidth > obstacleCollisionX &&
+              playerCollisionY < obstacleCollisionY + obstacleCollisionHeight &&
+              playerCollisionY + playerCollisionHeight > obstacleCollisionY
+            ) {
+              gameOver = true;
+              gameOverCause = 'winter'; // Winter snow obstacle collision
+              
+              // Play default game over sound for winter obstacles
+              try {
+                if (gameOverSound && gameOverSound.state() === 'loaded') {
+                  gameOverSound.play();
+                } else {
+                  console.warn('Game over sound not ready, attempting to play anyway');
+                  gameOverSound && gameOverSound.play();
+                }
+              } catch (e) {
+                console.warn('Error playing winter obstacle game over sound:', e);
+              }
+            }
+          });
+          
+          // Winter side obstacles (mountains) - less forgiving since they're on sides
+          winterSideObstacles.forEach((obstacle) => {
+            let collisionReduction = 0.2; // Less forgiving for side obstacles
+            
+            if (isMobile()) {
+              collisionReduction = 0.3;
+            }
+            
+            if (selectedCar === 'solan-propell-sykkel') {
+              collisionReduction = 0.4;
+            }
+            
+            const obstacleCollisionX = obstacle.x + (obstacle.width * collisionReduction / 2);
+            const obstacleCollisionY = obstacle.y + (obstacle.height * collisionReduction / 2);
+            const obstacleCollisionWidth = obstacle.width * (1 - collisionReduction);
+            const obstacleCollisionHeight = obstacle.height * (1 - collisionReduction);
+            
+            let playerCollisionReduction = 0.2;
+            if (selectedCar === 'solan-propell-sykkel') {
+              playerCollisionReduction = 0.35;
+            }
+            
+            const playerCollisionX = player.x + (player.width * playerCollisionReduction / 2);
+            const playerCollisionY = player.y + (player.height * playerCollisionReduction / 2);
+            const playerCollisionWidth = player.width * (1 - playerCollisionReduction);
+            const playerCollisionHeight = player.height * (1 - playerCollisionReduction);
+            
+            if (
+              playerCollisionX < obstacleCollisionX + obstacleCollisionWidth &&
+              playerCollisionX + playerCollisionWidth > obstacleCollisionX &&
+              playerCollisionY < obstacleCollisionY + obstacleCollisionHeight &&
+              playerCollisionY + playerCollisionHeight > obstacleCollisionY
+            ) {
+              gameOver = true;
+              gameOverCause = 'winter'; // Winter mountain obstacle collision
+              
+              // Play default game over sound for winter side obstacles
+              try {
+                if (gameOverSound && gameOverSound.state() === 'loaded') {
+                  gameOverSound.play();
+                } else {
+                  console.warn('Game over sound not ready, attempting to play anyway');
+                  gameOverSound && gameOverSound.play();
+                }
+              } catch (e) {
+                console.warn('Error playing winter side obstacle game over sound:', e);
+              }
+            }
+          });
+        }
+
         // Update display - only show scoreboards when game is active
         if (gameStarted && !gameOver) {
           scoreDisplay.style.display = "block";
@@ -2937,7 +3627,7 @@ const canvas = document.getElementById("gameCanvas");
         const displayWidth = canvas.getBoundingClientRect().width;
         const displayHeight = canvas.getBoundingClientRect().height;
 
-        // Draw background (desert or grass based on scene)
+        // Draw background (desert, winter, or grass based on scene)
         if (desertSceneActive) {
           // Desert background - sandy beige gradient
           const gradient = ctx.createLinearGradient(0, 0, 0, displayHeight);
@@ -2945,6 +3635,9 @@ const canvas = document.getElementById("gameCanvas");
           gradient.addColorStop(0.5, "#DEB887"); // Burlywood
           gradient.addColorStop(1, "#D2B48C"); // Tan
           ctx.fillStyle = gradient;
+        } else if (winterSceneActive && winterFogActive) {
+          // Winter background - darker white/light gray for sides
+          ctx.fillStyle = "#E8E8E8"; // Darker white/light gray for winter sides
         } else {
           // Normal grass background
           ctx.fillStyle = "#228B22"; // Forest green color for grass
@@ -2954,6 +3647,8 @@ const canvas = document.getElementById("gameCanvas");
         // Draw track (scrolling road) - using display dimensions
         if (desertSceneActive) {
           ctx.fillStyle = "#CD853F"; // Desert road color (sandy brown)
+        } else if (winterSceneActive && winterFogActive) {
+          ctx.fillStyle = "#FAFAFA"; // Winter road color (white)
         } else {
           ctx.fillStyle = "gray"; // Normal road color
         }
@@ -3299,6 +3994,92 @@ const canvas = document.getElementById("gameCanvas");
           });
         }
 
+        // Draw winter obstacles during winter scene (only after visual delay)
+        if (winterSceneActive && winterFogActive) {
+          // Draw winter main obstacles (snow)
+          winterObstacles.forEach((obstacle) => {
+            // Draw shadow circle behind obstacle
+            const shadowRadius = Math.max(obstacle.width, obstacle.height) / 2 + 8;
+            const shadowCenterX = obstacle.x + obstacle.width / 2;
+            const shadowCenterY = obstacle.y + obstacle.height;
+            
+            // Shadow gradient
+            const gradient = ctx.createRadialGradient(
+              shadowCenterX, shadowCenterY, 0,
+              shadowCenterX, shadowCenterY, shadowRadius
+            );
+            gradient.addColorStop(0, 'rgba(100, 100, 150, 0.3)'); // Bluish shadow for winter
+            gradient.addColorStop(1, 'rgba(100, 100, 150, 0)');
+            
+            ctx.fillStyle = gradient;
+            ctx.beginPath();
+            ctx.arc(shadowCenterX, shadowCenterY, shadowRadius, 0, 2 * Math.PI);
+            ctx.fill();
+            
+            // Draw the snow obstacle image
+            if (snowImageLoaded) {
+              ctx.drawImage(
+                snowImage,
+                obstacle.x,
+                obstacle.y,
+                obstacle.width,
+                obstacle.height
+              );
+            } else {
+              // Fallback: white snow pile
+              ctx.fillStyle = "white";
+              ctx.strokeStyle = "#E6F3FF"; // Light blue outline
+              ctx.lineWidth = 2;
+              ctx.fillRect(obstacle.x, obstacle.y, obstacle.width, obstacle.height);
+              ctx.strokeRect(obstacle.x, obstacle.y, obstacle.width, obstacle.height);
+            }
+          });
+          
+          // Draw winter side obstacles (mountains)
+          winterSideObstacles.forEach((obstacle) => {
+            // Draw shadow circle behind side obstacle
+            const shadowRadius = Math.max(obstacle.width, obstacle.height) / 2 + 6;
+            const shadowCenterX = obstacle.x + obstacle.width / 2;
+            const shadowCenterY = obstacle.y + obstacle.height;
+            
+            // Shadow gradient
+            const gradient = ctx.createRadialGradient(
+              shadowCenterX, shadowCenterY, 0,
+              shadowCenterX, shadowCenterY, shadowRadius
+            );
+            gradient.addColorStop(0, 'rgba(100, 100, 150, 0.25)');
+            gradient.addColorStop(1, 'rgba(100, 100, 150, 0)');
+            
+            ctx.fillStyle = gradient;
+            ctx.beginPath();
+            ctx.arc(shadowCenterX, shadowCenterY, shadowRadius, 0, 2 * Math.PI);
+            ctx.fill();
+            
+            // Draw the mountain obstacle image
+            if (mountainImageLoaded) {
+              ctx.drawImage(
+                mountainImage,
+                obstacle.x,
+                obstacle.y,
+                obstacle.width,
+                obstacle.height
+              );
+            } else {
+              // Fallback: gray mountain with snow cap
+              ctx.fillStyle = "#8B9DC3"; // Gray-blue mountain
+              ctx.fillRect(obstacle.x, obstacle.y, obstacle.width, obstacle.height);
+              
+              // Snow cap
+              ctx.fillStyle = "white";
+              ctx.fillRect(obstacle.x, obstacle.y, obstacle.width, obstacle.height * 0.3);
+              
+              ctx.strokeStyle = "#5D6B8D";
+              ctx.lineWidth = 2;
+              ctx.strokeRect(obstacle.x, obstacle.y, obstacle.width, obstacle.height);
+            }
+          });
+        }
+
         // Draw regular collectibles (non-radar)
         collectibles.forEach((collectible) => {
           if (!collectible.isRadar) {
@@ -3354,6 +4135,35 @@ const canvas = document.getElementById("gameCanvas");
               ctx.shadowBlur = 0;
               ctx.shadowOffsetX = 0;
               ctx.shadowOffsetY = 0;
+            } else if (collectible.type === 'kjelke') {
+              // Draw kjelke (winter collectible with 15 points)
+              if (kjelkeImageLoaded) {
+                ctx.drawImage(
+                  kjelkeImage,
+                  collectible.x,
+                  collectible.y,
+                  collectible.width,
+                  collectible.height
+                );
+              } else {
+                // Fallback for kjelke: brown sled shape
+                ctx.fillStyle = "#8B4513"; // Brown color
+                ctx.fillRect(
+                  collectible.x,
+                  collectible.y,
+                  collectible.width,
+                  collectible.height
+                );
+                // Add some detail lines
+                ctx.strokeStyle = "#654321";
+                ctx.lineWidth = 2;
+                ctx.strokeRect(
+                  collectible.x,
+                  collectible.y,
+                  collectible.width,
+                  collectible.height
+                );
+              }
             } else {
               // Draw oil lamp (default)
               if (collectibleImageLoaded) {
@@ -3545,66 +4355,142 @@ const canvas = document.getElementById("gameCanvas");
 
           // Fade in for first 1 second, full opacity for 6 seconds, fade out for last 1 second
           if (mistTimer > mistDuration - 1000) {
-            mistOpacity = ((mistDuration - mistTimer) / 1000) * 0.85; // Fade in - much denser
+            mistOpacity = ((mistDuration - mistTimer) / 1000) * 0.855; // Fade in - dense but not overwhelming
           } else if (mistTimer < 1000) {
-            mistOpacity = (mistTimer / 1000) * 0.85; // Fade out - much denser
+            mistOpacity = (mistTimer / 1000) * 0.855; // Fade out - dense but not overwhelming
           } else {
-            mistOpacity = 0.85; // Full mist - much denser
+            mistOpacity = 0.855; // Full mist - 10% less foggy (0.95 × 0.9)
           }
 
           // Create animated mist particles
           const time = gameTime / 1000;
           ctx.globalAlpha = mistOpacity;
 
-          // Draw optimized mist layers (reduced for better performance)
-          const particlesPerLayer = isMobile() ? 8 : 12; // Fewer particles on mobile
-          const layerCount = isMobile() ? 3 : 4; // Fewer layers on mobile
+          // Calculate track boundaries for mist coverage
+          const canvasDisplayWidth = canvas.getBoundingClientRect().width;
+          const trackWidthRatio = isMobile() ? 0.7 : 0.5;
+          const trackLeft = canvasDisplayWidth * (1 - trackWidthRatio) / 2;
+          const trackWidth = canvasDisplayWidth * trackWidthRatio;
+          const trackRight = trackLeft + trackWidth;
+          
+          // Draw extremely dense mist layers - ONLY over the race track
+          const particlesPerLayer = (isMobile() || isTablet()) ? 16 : 14; // Even more particles for density
+          const layerCount = (isMobile() || isTablet()) ? 7 : 6; // More layers for thicker fog
           
           for (let layer = 0; layer < layerCount; layer++) {
             const layerOffset = layer * 80;
             const layerSpeed = (layer + 1) * 0.4;
 
             for (let i = 0; i < particlesPerLayer; i++) {
-              const x =
-                ((i * 80 + Math.sin(time * layerSpeed + i) * 60 + layerOffset) %
-                  (canvas.width + 300)) -
-                150;
+              // Position mist particles only within track boundaries
+              const x = trackLeft + ((i * (trackWidth / particlesPerLayer) + Math.sin(time * layerSpeed + i) * 30) % trackWidth);
+              // Enhanced Y distribution for full track coverage on mobile/tablet
+              const yRange = (isMobile() || isTablet()) ? canvas.height + 200 : canvas.height + 150;
+              const yOffset = (isMobile() || isTablet()) ? -100 : -75;
               const y =
                 ((i * 60 + Math.cos(time * layerSpeed * 0.8 + i) * 40) %
-                  (canvas.height + 150)) -
-                75;
+                  yRange) +
+                yOffset;
 
-              // Create larger, denser radial gradient for each mist particle
+              // Create track-focused mist particles  
+              const mistSizeMultiplier = isTablet() ? 2.5 : (isMobile() ? 1.8 : 1.2); // Adjusted for track coverage
+              const baseRadius = (trackWidth / particlesPerLayer) * 0.8 * mistSizeMultiplier; // Size based on track width
+              const layerRadius = layer * 15 * mistSizeMultiplier;
               const gradient = ctx.createRadialGradient(
                 x,
                 y,
                 0,
                 x,
                 y,
-                80 + layer * 25
+                baseRadius + layerRadius
               );
               gradient.addColorStop(
                 0,
-                `rgba(200, 200, 200, ${0.5 + layer * 0.15})`
+                `rgba(180, 180, 180, ${0.7 + layer * 0.2})` // Denser center, darker color
               );
               gradient.addColorStop(
-                0.7,
-                `rgba(210, 210, 210, ${0.2 + layer * 0.08})`
+                0.5,
+                `rgba(200, 200, 200, ${0.4 + layer * 0.15})` // More opacity at mid-point
+              );
+              gradient.addColorStop(
+                0.8,
+                `rgba(210, 210, 210, ${0.2 + layer * 0.1})` // Extended dense area
               );
               gradient.addColorStop(1, "rgba(220, 220, 220, 0)");
 
               ctx.fillStyle = gradient;
+              const particleRadius = baseRadius + layerRadius;
               ctx.fillRect(
-                x - 80 - layer * 25,
-                y - 80 - layer * 25,
-                160 + layer * 50,
-                160 + layer * 50
+                x - particleRadius,
+                y - particleRadius,
+                particleRadius * 2,
+                particleRadius * 2
               );
             }
           }
 
           // Add additional heavy fog overlay
           ctx.fillStyle = `rgba(230, 230, 230, ${mistOpacity * 0.3})`;
+          ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+          // Reset global alpha
+          ctx.globalAlpha = 1.0;
+        }
+
+        // Draw winter fog overlay if active (lighter fog without dirty tricks)
+        if (winterFogActive && winterSceneActive) {
+          // Calculate winter fog opacity (lighter than mist)
+          let fogOpacity = 0.4; // Much lighter than mist effect
+          
+          // Create animated winter fog particles
+          const time = gameTime / 1000;
+          ctx.globalAlpha = fogOpacity;
+
+          // Calculate track boundaries for fog coverage
+          const canvasDisplayWidth = canvas.getBoundingClientRect().width;
+          const trackWidthRatio = isMobile() ? 0.7 : 0.5;
+          const trackLeft = canvasDisplayWidth * (1 - trackWidthRatio) / 2;
+          const trackWidth = canvasDisplayWidth * trackWidthRatio;
+          const trackRight = trackLeft + trackWidth;
+          
+          // Draw light winter fog layers - over the race track
+          const particlesPerLayer = (isMobile() || isTablet()) ? 8 : 6; // Fewer particles for lighter effect
+          const layerCount = (isMobile() || isTablet()) ? 4 : 3; // Fewer layers for lighter fog
+          
+          for (let layer = 0; layer < layerCount; layer++) {
+            const layerOffset = layer * 60;
+            const layerSpeed = (layer + 1) * 0.3; // Slower movement for gentler effect
+
+            for (let i = 0; i < particlesPerLayer; i++) {
+              // Position fog particles only within track boundaries
+              const x = trackLeft + ((i * (trackWidth / particlesPerLayer) + Math.sin(time * layerSpeed + i) * 20) % trackWidth);
+              // Winter fog Y distribution
+              const yRange = (isMobile() || isTablet()) ? canvas.height + 150 : canvas.height + 100;
+              const yOffset = (isMobile() || isTablet()) ? -75 : -50;
+              const y =
+                ((i * 50 + Math.cos(time * layerSpeed * 0.7 + i) * 30) %
+                  yRange) +
+                yOffset;
+
+              // Winter fog particle (light blue-white)
+              const particleRadius = (isMobile() || isTablet()) ? 15 + layer * 3 : 12 + layer * 2.5;
+              
+              const gradient = ctx.createRadialGradient(x, y, 0, x, y, particleRadius);
+              gradient.addColorStop(0, 'rgba(245, 248, 255, 0.3)'); // Light blue-white center
+              gradient.addColorStop(1, 'rgba(220, 235, 250, 0)'); // Transparent edges
+              
+              ctx.fillStyle = gradient;
+              ctx.fillRect(
+                x - particleRadius,
+                y - particleRadius,
+                particleRadius * 2,
+                particleRadius * 2
+              );
+            }
+          }
+
+          // Add light winter fog overlay (blue-tinted)
+          ctx.fillStyle = `rgba(240, 245, 255, ${fogOpacity * 0.2})`;
           ctx.fillRect(0, 0, canvas.width, canvas.height);
 
           // Reset global alpha
@@ -3793,33 +4679,47 @@ const canvas = document.getElementById("gameCanvas");
 
         // Draw radar hint message at bottom of canvas when mist starts (outside of radarActive block)
         if (showRadarHint) {
-          // Use actual canvas dimensions, not display dimensions
+          // Use display dimensions for proper responsive positioning
+          const displayWidth = canvas.getBoundingClientRect().width;
+          const displayHeight = canvas.getBoundingClientRect().height;
           const canvasWidth = canvas.width;
           const canvasHeight = canvas.height;
           
-          // Position with safe zone at bottom center
-          const safeZone = 120; // Larger safe zone from bottom
-          const hintY = canvasHeight - safeZone; // Much higher from bottom
+          // Device-specific positioning and sizing
+          const isMobileDevice = isMobile();
+          const isTabletDevice = isTablet();
+          
+          // Responsive safe zone and positioning
+          const safeZone = isMobileDevice ? 80 : (isTabletDevice ? 100 : 120);
+          const hintY = canvasHeight - safeZone;
           const hintX = canvasWidth / 2;
           
+          // Responsive font size
+          const fontSize = isMobileDevice ? 
+            Math.max(20, Math.min(28, displayWidth * 0.045)) : 
+            (isTabletDevice ? Math.max(24, Math.min(32, displayWidth * 0.04)) : 28);
+          
           // Draw hint text with mystical green shadow
-          ctx.font = "bold 28px Arial"; // Slightly larger font
+          ctx.font = `bold ${fontSize}px Arial`;
           ctx.fillStyle = "#FFFFFF"; // White text
           ctx.textAlign = "center";
           ctx.shadowColor = "#00FF00"; // Green text shadow
-          ctx.shadowBlur = 15;
+          ctx.shadowBlur = isMobileDevice ? 10 : 15;
           ctx.fillText("Hint: Catch the radar", hintX, hintY);
           
           // Draw radar image AFTER text with enhanced green glow
-          const imageSize = 45; // Larger image
+          const imageSize = isMobileDevice ? 
+            Math.max(30, Math.min(40, displayWidth * 0.06)) : 
+            (isTabletDevice ? Math.max(35, Math.min(45, displayWidth * 0.05)) : 45);
           const textMetrics = ctx.measureText("Hint: Catch the radar");
           const textWidth = textMetrics.width;
-          const imageX = hintX + textWidth / 2 + 25; // Position image to the right of text with more spacing
-          const imageY = hintY - imageSize / 2 - 3; // Align with text center
+          const spacing = isMobileDevice ? 15 : 25;
+          const imageX = hintX + textWidth / 2 + spacing;
+          const imageY = hintY - imageSize / 2 - 3;
           
           // Enhanced green glow for radar image
           ctx.shadowColor = "#00FF00"; // Bright green shadow
-          ctx.shadowBlur = 25; // Stronger glow for image
+          ctx.shadowBlur = isMobileDevice ? 15 : 25;
           ctx.shadowOffsetX = 0;
           ctx.shadowOffsetY = 0;
           
