@@ -304,6 +304,42 @@ const canvas = document.getElementById("gameCanvas");
         console.error("Failed to load camel image");
       };
 
+      // Load sand dunes image for desert scene background
+      const sandDunesImage = new Image();
+      sandDunesImage.src = "sand-dunes.png";
+      let sandDunesImageLoaded = false;
+      sandDunesImage.onload = () => {
+        sandDunesImageLoaded = true;
+        console.log("Sand dunes image loaded successfully");
+      };
+      sandDunesImage.onerror = () => {
+        console.error("Failed to load sand dunes image");
+      };
+
+      // Load mountain image for normal scene sides
+      const mountainImage = new Image();
+      mountainImage.src = "mountain-tree.png";
+      let mountainImageLoaded = false;
+      mountainImage.onload = () => {
+        mountainImageLoaded = true;
+        console.log("Mountain image loaded successfully");
+      };
+      mountainImage.onerror = () => {
+        console.error("Failed to load mountain image");
+      };
+
+      // Load tree image for normal scene sides
+      const treeImage = new Image();
+      treeImage.src = "tree.png";
+      let treeImageLoaded = false;
+      treeImage.onload = () => {
+        treeImageLoaded = true;
+        console.log("Tree image loaded successfully");
+      };
+      treeImage.onerror = () => {
+        console.error("Failed to load tree image");
+      };
+
       let isMoving = false;
 
       // Game state
@@ -330,6 +366,11 @@ const canvas = document.getElementById("gameCanvas");
       let showMistMessage = false;
       let mistMessageTimer = 0;
       const mistMessageDuration = 2000; // Display mist message for 2 seconds
+      
+      // Radar hint variables (shown when mist starts)
+      let showRadarHint = false;
+      let radarHintTimer = 0;
+      const radarHintDuration = 3000; // Display radar hint for 3 seconds
       
       // Desert message variables
       let showDesertMessage = false;
@@ -365,10 +406,10 @@ const canvas = document.getElementById("gameCanvas");
       // Track what caused game over
       let gameOverCause = 'default';
       
-      // Side obstacle spawning pattern
-      let currentSide = 'left'; // Start with left side
-      let sideObstacleCount = 0; // Count obstacles on current side
-      let sideObstaclesPerSide = 3 + Math.floor(Math.random() * 2); // 3-4 obstacles per side
+      // Side obstacle spawning pattern - alternating both sides with opposite flows
+      const sidePattern = ['mountain', 'tree', 'tree', 'stand']; // 4-step repeating cycle
+      let leftSidePatternIndex = 0; // Left side starts with mountain
+      let rightSidePatternIndex = 2; // Right side starts with tree (offset for opposite pattern)
       const milestoneMessages = [
         "Schwinge med schweiva!!", // 20
         "Din bil, schenial!", // 40
@@ -1065,10 +1106,11 @@ const canvas = document.getElementById("gameCanvas");
       let trackY = 0;
       const obstacles = [];
       const sideObstacles = []; // New array for side obstacles
+      const mountainTrees = []; // Array for mountain trees on sides
       const collectibles = [];
       const obstacleFrequency = 1500;
       const collectibleFrequency = 2000;
-      const sideObstacleFrequency = 800; // Side obstacles spawn more frequently
+      const sideObstacleFrequency = 500; // Side obstacles spawn much more frequently for closer spacing
       let lastObstacleTime = 0;
       let lastCollectibleTime = 0;
       let lastSideObstacleTime = 0;
@@ -1222,58 +1264,147 @@ const canvas = document.getElementById("gameCanvas");
         obstacles.push({ x, y: -50, width, height, type: obstacleType });
       }
 
-      // Create a side obstacle (outside track)
-      function createSideObstacle() {
-        // Smaller size for mobile to ensure they stay off track
-        const baseWidth = isMobile() ? 40 : 50;
-        const baseHeight = isMobile() ? 40 : 50;
-        const sizeMultiplier = isMobile() ? 2.5 : 5; // Smaller on mobile
-        const width = baseWidth * sizeMultiplier;
-        const height = baseHeight * sizeMultiplier;
+      // Create elements on both sides following alternating patterns
+      function createSideElements() {
+        // Only spawn during normal scenes (not desert)
+        if (desertSceneActive) return;
         
         // Get current canvas display width
         const canvasDisplayWidth = canvas.getBoundingClientRect().width;
         
-        // Calculate track boundaries to place obstacles outside
+        // Calculate track boundaries
         const trackWidthRatio = isMobile() ? 0.7 : 0.5;
         const trackLeft = canvasDisplayWidth * (1 - trackWidthRatio) / 2;
         const trackRight = trackLeft + (canvasDisplayWidth * trackWidthRatio);
         
-        // Use pattern-based side selection (3-4 obstacles per side)
-        let x, side;
-        
-        if (currentSide === 'left') {
-          // Place on left side (between canvas edge and track start) with safety margin
-          const safetyMargin = 10; // pixels from track edge
-          const availableSpace = trackLeft - width - safetyMargin;
-          if (availableSpace > 0) {
-            x = Math.random() * availableSpace;
-          } else {
-            x = 0; // Fallback if no space
+        // Helper function to check if a position collides with existing elements
+        function checkCollision(x, y, width, height, side) {
+          const buffer = 20; // Minimum distance between elements
+          
+          // Check against side obstacles (stands)
+          for (let obstacle of sideObstacles) {
+            if (obstacle.side === side && 
+                obstacle.y > -obstacle.height - 100 && // Only check recent obstacles
+                x < obstacle.x + obstacle.width + buffer &&
+                x + width > obstacle.x - buffer &&
+                y < obstacle.y + obstacle.height + buffer &&
+                y + height > obstacle.y - buffer) {
+              return true;
+            }
           }
-          side = 'left';
-        } else {
-          // Place on right side (between track end and canvas edge) with safety margin
-          const safetyMargin = 10; // pixels from track edge
-          const availableSpace = canvasDisplayWidth - trackRight - width - safetyMargin;
-          if (availableSpace > 0) {
-            x = trackRight + safetyMargin + Math.random() * availableSpace;
-          } else {
-            x = trackRight + safetyMargin; // Fallback if no space
+          
+          // Check against mountain trees (mountains and trees)
+          for (let tree of mountainTrees) {
+            if (tree.side === side && 
+                tree.y > -tree.height - 100 && // Only check recent elements
+                x < tree.x + tree.width + buffer &&
+                x + width > tree.x - buffer &&
+                y < tree.y + tree.height + buffer &&
+                y + height > tree.y - buffer) {
+              return true;
+            }
           }
-          side = 'right';
+          
+          return false;
+        }
+
+        // Helper function to create an element on a specific side
+        function createElement(side, elementType) {
+          // Determine dimensions based on element type (made wider as requested)
+          let width, height;
+          const safetyMargin = 15; // Increased margin for wider elements
+          
+          if (elementType === 'mountain') {
+            width = isMobile() ? 80 : 120; // Wider than before
+            height = isMobile() ? 100 : 140;
+          } else if (elementType === 'tree') {
+            width = isMobile() ? 70 : 90; // Wider than before
+            height = isMobile() ? 90 : 130;
+          } else { // stand
+            width = isMobile() ? 40 : 85; // Keep width smaller to avoid track overlap
+            height = isMobile() ? 120 : 140; // Much taller base height
+            const widthMultiplier = isMobile() ? 1.5 : 2; // Apply multiplier only to width
+            const heightMultiplier = isMobile() ? 2 : 3; // Higher multiplier for height
+            width *= widthMultiplier;
+            height *= heightMultiplier;
+          }
+          
+          // Calculate position with collision detection
+          let x;
+          const y = -height; // Starting Y position
+          let attempts = 0;
+          const maxAttempts = 10;
+          let validPosition = false;
+          
+          while (!validPosition && attempts < maxAttempts) {
+            if (side === 'left') {
+              if (elementType === 'stand') {
+                // For stands, ensure they're completely outside track with extra margin
+                const extraMargin = 20; // Additional margin for large stands
+                const availableSpace = trackLeft - width - safetyMargin - extraMargin;
+                if (availableSpace > 0) {
+                  x = Math.random() * availableSpace;
+                } else {
+                  // If no space, place at edge with minimum safe distance
+                  x = Math.max(0, trackLeft - width - safetyMargin - extraMargin);
+                }
+              } else {
+                // Mountains and trees use normal positioning
+                const availableSpace = trackLeft - width - safetyMargin;
+                x = availableSpace > 0 ? Math.random() * availableSpace : 0;
+              }
+            } else {
+              if (elementType === 'stand') {
+                // For stands, ensure they're completely outside track with extra margin
+                const extraMargin = 20; // Additional margin for large stands
+                const minX = trackRight + safetyMargin + extraMargin;
+                const availableSpace = canvasDisplayWidth - minX - width;
+                if (availableSpace > 0) {
+                  x = minX + Math.random() * availableSpace;
+                } else {
+                  // If no space, place at minimum safe distance
+                  x = minX;
+                }
+              } else {
+                // Mountains and trees use normal positioning
+                const availableSpace = canvasDisplayWidth - trackRight - width - safetyMargin;
+                x = availableSpace > 0 ? trackRight + safetyMargin + Math.random() * availableSpace : trackRight + safetyMargin;
+              }
+            }
+            
+            // Check for collisions
+            if (!checkCollision(x, y, width, height, side)) {
+              validPosition = true;
+            } else {
+              attempts++;
+            }
+          }
+          
+          // If we couldn't find a valid position after max attempts, skip spawning this element
+          if (!validPosition) {
+            return;
+          }
+          
+          // Add to appropriate array based on type
+          if (elementType === 'mountain') {
+            mountainTrees.push({ x, y, width, height, side, type: 'mountain' });
+          } else if (elementType === 'tree') {
+            mountainTrees.push({ x, y, width, height, side, type: 'tree' });
+          } else { // stand
+            sideObstacles.push({ x, y, width, height, side });
+          }
         }
         
-        // Update pattern counters
-        sideObstacleCount++;
-        if (sideObstacleCount >= sideObstaclesPerSide) {
-          // Switch to other side
-          currentSide = currentSide === 'left' ? 'right' : 'left';
-          sideObstacleCount = 0;
-          sideObstaclesPerSide = 3 + Math.floor(Math.random() * 2); // New random count for next side
-        }
+        // Create elements for both sides based on their current pattern
+        const leftElementType = sidePattern[leftSidePatternIndex];
+        const rightElementType = sidePattern[rightSidePatternIndex];
         
-        sideObstacles.push({ x, y: -50, width, height, side });
+        createElement('left', leftElementType);
+        createElement('right', rightElementType);
+        
+        // Advance pattern indices (cycle through 0, 1, 2, 3)
+        leftSidePatternIndex = (leftSidePatternIndex + 1) % sidePattern.length;
+        rightSidePatternIndex = (rightSidePatternIndex + 1) % sidePattern.length;
       }
 
       // Create a collectible
@@ -1355,8 +1486,11 @@ const canvas = document.getElementById("gameCanvas");
         lastDesertCollectibleTime = 0;
         showMessage = false;
         messageTimer = 0;
+        showRadarHint = false;
+        radarHintTimer = 0;
         obstacles.length = 0;
         sideObstacles.length = 0;
+        mountainTrees.length = 0;
         collectibles.length = 0;
         desertObstacles.length = 0;
 
@@ -1427,10 +1561,9 @@ const canvas = document.getElementById("gameCanvas");
         // Reset game over cause
         gameOverCause = 'default';
         
-        // Reset side obstacle pattern
-        currentSide = 'left';
-        sideObstacleCount = 0;
-        sideObstaclesPerSide = 3 + Math.floor(Math.random() * 2);
+        // Reset side element pattern indices
+        leftSidePatternIndex = 0; // Left side starts with mountain
+        rightSidePatternIndex = 2; // Right side starts with tree (offset for opposite pattern)
 
         // Reset speeds to base values
         currentTrackSpeed = BASE_TRACK_SPEED;
@@ -1627,9 +1760,9 @@ const canvas = document.getElementById("gameCanvas");
           lastDesertCollectibleTime = timestamp;
         }
 
-        // Create side obstacles (pause spawning during desert scene)
+        // Create side elements with alternating patterns (pause spawning during desert scene)
         if (!desertSceneActive && timestamp - lastSideObstacleTime > sideObstacleFrequency) {
-          createSideObstacle();
+          createSideElements();
           lastSideObstacleTime = timestamp;
         }
 
@@ -1661,6 +1794,19 @@ const canvas = document.getElementById("gameCanvas");
           for (let i = sideObstacles.length - 1; i >= 0; i--) {
             if (sideObstacles[i].y > canvas.height + sideObstacles[i].height) {
               sideObstacles.splice(i, 1);
+            }
+          }
+        }
+
+        // Update mountain trees (freeze movement during desert scene)
+        if (!desertSceneActive) {
+          mountainTrees.forEach((tree) => {
+            tree.y += currentTrackSpeed * (deltaTime / 1000);
+          });
+          // Remove off-screen mountain trees
+          for (let i = mountainTrees.length - 1; i >= 0; i--) {
+            if (mountainTrees[i].y > canvas.height + mountainTrees[i].height) {
+              mountainTrees.splice(i, 1);
             }
           }
         }
@@ -1747,10 +1893,16 @@ const canvas = document.getElementById("gameCanvas");
           }
         });
 
+        // Check if score reaches exactly 40 points to show radar hint
+        if (score === 40 && !showRadarHint) {
+          showRadarHint = true;
+          radarHintTimer = radarHintDuration;
+        }
+
         // Check for score milestones
         // Trigger a message every time the score is exactly a multiple of milestoneInterval
-        // But skip milestone message if mist message, desert message is active or if it's a mist trigger (multiples of 50)
-        if (score > 0 && score % milestoneInterval === 0 && !showMessage && !showMistMessage && !showDesertMessage && score % 50 !== 0) {
+        // But skip milestone message if mist is active, mist message, desert message is active or if it's a mist trigger (multiples of 50)
+        if (score > 0 && score % milestoneInterval === 0 && !showMessage && !showMistMessage && !showDesertMessage && !mistActive && score % 50 !== 0) {
           showMessage = true;
           messageTimer = messageDuration;
 
@@ -1804,6 +1956,14 @@ const canvas = document.getElementById("gameCanvas");
           messageTimer -= deltaTime;
           if (messageTimer <= 0) {
             showMessage = false;
+          }
+        }
+        
+        // Update radar hint timer
+        if (showRadarHint) {
+          radarHintTimer -= deltaTime;
+          if (radarHintTimer <= 0) {
+            showRadarHint = false;
           }
         }
 
@@ -2352,6 +2512,31 @@ const canvas = document.getElementById("gameCanvas");
           );
         }
 
+        // Draw sand dunes on the sides during desert scene
+        if (desertSceneActive && sandDunesImageLoaded) {
+          // Draw sand dunes on the left side of the track
+          const leftDunesX = 0;
+          const leftDunesWidth = trackStartX + 20; // Overlap slightly with track edge
+          ctx.drawImage(
+            sandDunesImage,
+            leftDunesX,
+            0,
+            leftDunesWidth,
+            displayHeight
+          );
+
+          // Draw sand dunes on the right side of the track
+          const rightDunesX = trackStartX + trackWidth - 20; // Overlap slightly with track edge
+          const rightDunesWidth = displayWidth - rightDunesX;
+          ctx.drawImage(
+            sandDunesImage,
+            rightDunesX,
+            0,
+            rightDunesWidth,
+            displayHeight
+          );
+        }
+
         // Draw Il Tempo Gigante using the image
         if (imageLoaded) {
           ctx.drawImage(
@@ -2479,6 +2664,53 @@ const canvas = document.getElementById("gameCanvas");
           }
         });
 
+        // Draw mountain trees on sides during normal scenes
+        if (!desertSceneActive) {
+          mountainTrees.forEach((element) => {
+            if (element.type === 'mountain') {
+              // Draw mountain elements using mountain-tree.png
+              if (mountainImageLoaded) {
+                ctx.drawImage(
+                  mountainImage,
+                  element.x,
+                  element.y,
+                  element.width,
+                  element.height
+                );
+              } else {
+                // Fallback - brown rectangle for mountain
+                ctx.fillStyle = "#8B4513"; // Saddle brown
+                ctx.fillRect(
+                  element.x,
+                  element.y,
+                  element.width,
+                  element.height
+                );
+              }
+            } else if (element.type === 'tree') {
+              // Draw tree elements using tree.png
+              if (treeImageLoaded) {
+                ctx.drawImage(
+                  treeImage,
+                  element.x,
+                  element.y,
+                  element.width,
+                  element.height
+                );
+              } else {
+                // Fallback - green rectangle for tree
+                ctx.fillStyle = "#228B22"; // Forest green
+                ctx.fillRect(
+                  element.x,
+                  element.y,
+                  element.width,
+                  element.height
+                );
+              }
+            }
+          });
+        }
+
         // Draw dynamic desert obstacles during desert scene
         if (desertSceneActive) {
           desertObstacles.forEach((obstacle) => {
@@ -2559,8 +2791,8 @@ const canvas = document.getElementById("gameCanvas");
           }
         });
 
-        // Draw the milestone message and image if active (but not during desert scene)
-        if (showMessage && !desertSceneActive) {
+        // Draw the milestone message and image if active (but not during desert scene or mist)
+        if (showMessage && !desertSceneActive && !mistActive) {
           const currentMilestone =
             Math.floor(score / milestoneInterval) * milestoneInterval;
           const milestoneIndex = Math.min(
@@ -2640,80 +2872,6 @@ const canvas = document.getElementById("gameCanvas");
           ctx.fillText(milestoneMessages[milestoneIndex], textX, textY);
         }
 
-        // Draw the mist message and image if active
-        if (showMistMessage) {
-          // Define responsive image dimensions based on device type
-          const isMobileDevice = isMobile();
-          const displayWidth = canvas.getBoundingClientRect().width;
-          const displayHeight = canvas.getBoundingClientRect().height;
-          
-          // Responsive image sizing: smaller on mobile, larger on desktop
-          const imageWidth = isMobileDevice ? Math.min(80, displayWidth * 0.2) : 120;
-          const imageHeight = isMobileDevice ? Math.min(80, displayHeight * 0.12) : 120;
-          
-          // Responsive font size: smaller on mobile, larger on desktop
-          const fontSize = isMobileDevice ? Math.max(20, Math.min(32, displayWidth * 0.05)) : 48;
-          ctx.font = `${fontSize}px Arial`;
-          
-          // Responsive gap between image and text
-          const gap = isMobileDevice ? Math.max(10, displayWidth * 0.02) : 20;
-
-          // Calculate positions with responsive values
-          const mistMessageText = "Dirty tricks";
-          const textWidth = ctx.measureText(mistMessageText).width;
-          const totalWidth = imageWidth + gap + textWidth;
-          const startX = displayWidth / 2 - totalWidth / 2; // Start position to center the combined image and text
-          const imageX = Math.max(10, startX); // Image on the left with minimum margin
-          
-          // Position based on device type: under scoreboards for mobile, top for desktop
-          let imageY, textY;
-          if (isMobileDevice) {
-            // Mobile: position under scoreboards (same as milestone message)
-            const scoreboardHeight = 80; // Estimated height of scoreboards area
-            const marginFromScoreboards = 10; // Small margin under scoreboards
-            imageY = scoreboardHeight + marginFromScoreboards;
-            textY = imageY + imageHeight / 2 + (fontSize * 0.3);
-          } else {
-            // Desktop: position at top
-            imageY = 20;
-            textY = 20 + imageHeight / 2 + (fontSize * 0.3);
-          }
-          
-          const textX = imageX + imageWidth + gap; // Text to the right of the image
-
-          // Draw the mist message image (mysil.png) to the left
-          if (mistMessageImageLoaded) {
-            ctx.drawImage(
-              mistMessageImage,
-              imageX,
-              imageY,
-              imageWidth,
-              imageHeight
-            );
-          } else {
-            // Fallback if image fails to load
-            ctx.fillStyle = "purple";
-            ctx.fillRect(imageX, imageY, imageWidth, imageHeight);
-          }
-
-          // Draw the mist message text to the right of the image
-          ctx.fillStyle = "red";
-          ctx.textAlign = "left"; // Align text to the left for precise positioning
-          
-          // Add text shadow for better readability (both mobile and desktop)
-          ctx.shadowColor = "rgba(0, 0, 0, 0.8)";
-          ctx.shadowBlur = 6;
-          ctx.shadowOffsetX = 3;
-          ctx.shadowOffsetY = 3;
-          
-          ctx.fillText(mistMessageText, textX, textY);
-          
-          // Reset shadow
-          ctx.shadowColor = "transparent";
-          ctx.shadowBlur = 0;
-          ctx.shadowOffsetX = 0;
-          ctx.shadowOffsetY = 0;
-        }
 
         // Draw desert message using ben-redic-message.png
         if (showDesertMessage) {
@@ -2863,6 +3021,81 @@ const canvas = document.getElementById("gameCanvas");
           ctx.globalAlpha = 1.0;
         }
 
+        // Draw the mist message and image on top of mist overlay (so it's visible)
+        if (showMistMessage) {
+          // Define responsive image dimensions based on device type
+          const isMobileDevice = isMobile();
+          const displayWidth = canvas.getBoundingClientRect().width;
+          const displayHeight = canvas.getBoundingClientRect().height;
+          
+          // Responsive image sizing: smaller on mobile, larger on desktop
+          const imageWidth = isMobileDevice ? Math.min(80, displayWidth * 0.2) : 120;
+          const imageHeight = isMobileDevice ? Math.min(80, displayHeight * 0.12) : 120;
+          
+          // Responsive font size: smaller on mobile, larger on desktop
+          const fontSize = isMobileDevice ? Math.max(20, Math.min(32, displayWidth * 0.05)) : 48;
+          ctx.font = `${fontSize}px Arial`;
+          
+          // Responsive gap between image and text
+          const gap = isMobileDevice ? Math.max(10, displayWidth * 0.02) : 20;
+
+          // Calculate positions with responsive values
+          const mistMessageText = "Dirty tricks";
+          const textWidth = ctx.measureText(mistMessageText).width;
+          const totalWidth = imageWidth + gap + textWidth;
+          const startX = displayWidth / 2 - totalWidth / 2; // Start position to center the combined image and text
+          const imageX = Math.max(10, startX); // Image on the left with minimum margin
+          
+          // Position based on device type: under scoreboards for mobile, top for desktop
+          let imageY, textY;
+          if (isMobileDevice) {
+            // Mobile: position under scoreboards (same as milestone message)
+            const scoreboardHeight = 80; // Estimated height of scoreboards area
+            const marginFromScoreboards = 10; // Small margin under scoreboards
+            imageY = scoreboardHeight + marginFromScoreboards;
+            textY = imageY + imageHeight / 2 + (fontSize * 0.3);
+          } else {
+            // Desktop: position at top
+            imageY = 20;
+            textY = 20 + imageHeight / 2 + (fontSize * 0.3);
+          }
+          
+          const textX = imageX + imageWidth + gap; // Text to the right of the image
+
+          // Draw the mist message image (mysil.png) to the left
+          if (mistMessageImageLoaded) {
+            ctx.drawImage(
+              mistMessageImage,
+              imageX,
+              imageY,
+              imageWidth,
+              imageHeight
+            );
+          } else {
+            // Fallback if image fails to load
+            ctx.fillStyle = "purple";
+            ctx.fillRect(imageX, imageY, imageWidth, imageHeight);
+          }
+
+          // Draw the mist message text to the right of the image
+          ctx.fillStyle = "red";
+          ctx.textAlign = "left"; // Align text to the left for precise positioning
+          
+          // Add text shadow for better readability (both mobile and desktop)
+          ctx.shadowColor = "rgba(0, 0, 0, 0.8)";
+          ctx.shadowBlur = 6;
+          ctx.shadowOffsetX = 3;
+          ctx.shadowOffsetY = 3;
+          
+          ctx.fillText(mistMessageText, textX, textY);
+          
+          // Reset shadow
+          ctx.shadowColor = "transparent";
+          ctx.shadowBlur = 0;
+          ctx.shadowOffsetX = 0;
+          ctx.shadowOffsetY = 0;
+        }
+
         // Draw radar collectibles on top of mist (so they're visible through the fog)
         collectibles.forEach((collectible) => {
           if (collectible.isRadar) {
@@ -2941,6 +3174,64 @@ const canvas = document.getElementById("gameCanvas");
 
           // Reset global alpha
           ctx.globalAlpha = 1.0;
+        }
+        
+        // Draw radar hint message at bottom of canvas when mist starts (outside of radarActive block)
+        if (showRadarHint) {
+          // Use actual canvas dimensions, not display dimensions
+          const canvasWidth = canvas.width;
+          const canvasHeight = canvas.height;
+          
+          // Position with safe zone at bottom center
+          const safeZone = 120; // Larger safe zone from bottom
+          const hintY = canvasHeight - safeZone; // Much higher from bottom
+          const hintX = canvasWidth / 2;
+          
+          // Draw hint text with mystical green shadow
+          ctx.font = "bold 28px Arial"; // Slightly larger font
+          ctx.fillStyle = "#FFFFFF"; // White text
+          ctx.textAlign = "center";
+          ctx.shadowColor = "#00FF00"; // Green text shadow
+          ctx.shadowBlur = 15;
+          ctx.fillText("Hint: Catch the radar", hintX, hintY);
+          
+          // Draw radar image AFTER text with enhanced green glow
+          const imageSize = 45; // Larger image
+          const textMetrics = ctx.measureText("Hint: Catch the radar");
+          const textWidth = textMetrics.width;
+          const imageX = hintX + textWidth / 2 + 25; // Position image to the right of text with more spacing
+          const imageY = hintY - imageSize / 2 - 3; // Align with text center
+          
+          // Enhanced green glow for radar image
+          ctx.shadowColor = "#00FF00"; // Bright green shadow
+          ctx.shadowBlur = 25; // Stronger glow for image
+          ctx.shadowOffsetX = 0;
+          ctx.shadowOffsetY = 0;
+          
+          if (radarImageLoaded) {
+            ctx.drawImage(
+              radarImage,
+              imageX,
+              imageY,
+              imageSize,
+              imageSize
+            );
+          } else {
+            // Fallback: draw cyan circle with glow if image not loaded
+            ctx.fillStyle = "cyan";
+            ctx.fillRect(
+              imageX,
+              imageY,
+              imageSize,
+              imageSize
+            );
+          }
+          
+          // Reset shadow effects
+          ctx.shadowColor = "transparent";
+          ctx.shadowBlur = 0;
+          ctx.shadowOffsetX = 0;
+          ctx.shadowOffsetY = 0;
         }
       }
 

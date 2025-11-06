@@ -19,11 +19,17 @@
   <body>
     <img id="flaklypa-logo" src="image.png" alt="grand prix" />
     <div id="startScreen">
-      <p>
-        Use the arrow keys to drive your car. Avoid blodstrupmoen,
-        collect Aladdin Oil lamps 🧞‍♂️ to score points, and race as long as you
-        can!
-      </p>
+      <div id="startScreenContent">
+        <h2 style="color: goldenrod;">Welcome to Il Tempo Gigante Grand Prix! 🏎️💨</h2>
+        <p>💻 Use the arrow keys to drive your car.</p>
+        <p>📱 Tap left or right to steer.</p>
+        <p>
+          Avoid blodstrupmoen, collect Aladdin Oil lamps 🧞‍♂️ to score points, and
+          race as long as you can! 
+        </p>
+        <p>Sometimes dirty tricks are occuring - catch
+          the radar 📡 👀 when you can!</p>
+      </div>
       <img
         src="il-tempo-gigante.gif"
         alt="grand prix"
@@ -31,7 +37,7 @@
         height="200"
         style="margin-bottom: 16px"
       />
-      
+
       <!-- Step 1: Car Selection -->
       <div id="carSelectionStep">
         <h3>Step 1: Choose Your Car</h3>
@@ -41,7 +47,10 @@
             <span>Il Tempo Gigante</span>
           </div>
           <div class="car-option" data-car="desperados-rolls-royce">
-            <img src="desperados-rolls-royce.png" alt="Desperados Rolls Royce" />
+            <img
+              src="desperados-rolls-royce.png"
+              alt="Desperados Rolls Royce"
+            />
             <span>Desperados Rolls Royce</span>
           </div>
           <div class="car-option" data-car="boomerang-rapido">
@@ -55,9 +64,9 @@
         </div>
         <button id="confirmCarButton" disabled>Confirm Car Selection</button>
       </div>
-      
+
       <!-- Step 2: Name Input (initially hidden) -->
-      <div id="nameInputStep" style="display: none;">
+      <div id="nameInputStep" style="display: none">
         <h3>Step 2: Enter Your Name</h3>
         <input
           type="text"
@@ -68,9 +77,9 @@
         <br />
         <button id="confirmNameButton" disabled>Confirm Name</button>
       </div>
-      
+
       <!-- Step 3: Start Game (initially hidden) -->
-      <div id="startGameStep" style="display: none;">
+      <div id="startGameStep" style="display: none">
         <h3>Ready to Race!</h3>
         <p id="selectedCarDisplay"></p>
         <p id="selectedNameDisplay"></p>
@@ -82,7 +91,7 @@
           Start Game
         </button>
       </div>
-      
+
       <!-- Leaderboard on Start Menu -->
       <div id="startMenuLeaderboard">
         <img
@@ -93,7 +102,10 @@
           height="auto"
         />
         <h3>Emmanuel's Leaderboard</h3>
-        <div id="startLeaderboardStatus" style="font-size: 12px; margin: 5px 0; color: #888;">
+        <div
+          id="startLeaderboardStatus"
+          style="font-size: 12px; margin: 5px 0; color: #888"
+        >
           🔄 Connecting...
         </div>
         <ul id="startLeaderboardList"></ul>
@@ -117,7 +129,7 @@
     <!-- Game Content Wrapper for Desktop Layout -->
     <div class="game-content-wrapper">
       <canvas id="gameCanvas" width="800" height="800"></canvas>
-      
+
       <!-- Mobile Game Over Dialog (kept for mobile compatibility) -->
       <div id="mobileGameOverDialog" role="alert">
         <img
@@ -170,7 +182,7 @@
             <span id="gameOverScore"> </span>
           </div>
         </div>
-        
+
         <!-- Leaderboard moved inside game over dialog -->
         <div id="gameOverLeaderboard">
           <img
@@ -181,12 +193,15 @@
             height="auto"
           />
           <h2>Emmanuel's Leaderboard</h2>
-          <div id="leaderboardStatus" style="font-size: 12px; margin: 5px 0; color: #888;">
+          <div
+            id="leaderboardStatus"
+            style="font-size: 12px; margin: 5px 0; color: #888"
+          >
             🔄 Connecting...
           </div>
           <ul id="leaderboardList"></ul>
         </div>
-        
+
         <button id="restartButton">Restart Game (R)</button>
         <button id="backButton">Back to Menu</button>
       </div>
@@ -194,10 +209,10 @@
     <!-- Firebase SDK -->
     <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
-    
+
     <!-- Firebase Configuration -->
     <script src="./firebase-config.js"></script>
-    
+
     <script src="https://cdnjs.cloudflare.com/ajax/libs/howler/2.2.3/howler.min.js"></script>
     <script type="module" src="./script.js"></script>
   </body>
