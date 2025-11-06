@@ -427,6 +427,11 @@ const canvas = document.getElementById("gameCanvas");
       let desertMessageTimer = 0;
       const desertMessageDuration = 2000; // Display desert message for 2 seconds
       
+      // Winter hint message variables
+      let showWinterHint = false;
+      let winterHintTimer = 0;
+      const winterHintDuration = 3000; // Display winter hint for 3 seconds
+      
       // Radar effect variables
       let radarActive = false;
       let radarTimer = 0;
@@ -469,7 +474,7 @@ const canvas = document.getElementById("gameCanvas");
       // Winter scene variables
       let winterSceneActive = false;
       let winterSceneTimer = 0;
-      const winterSceneDuration = 12000; // 12 seconds in milliseconds
+      const winterSceneDuration = 15000; // 15 seconds in milliseconds
       const winterVisualDelay = 5000; // 5 seconds delay before winter visuals appear
       let winterSoundStarted = false;
       let firstWinterCompleted = false;
@@ -478,7 +483,7 @@ const canvas = document.getElementById("gameCanvas");
       
       // Winter obstacle spawning variables
       const winterObstacles = [];
-      const winterObstacleFrequency = 800; // Snow obstacles frequency
+      const winterObstacleFrequency = 1200; // Snow obstacles frequency (more spaced than normal)
       let lastWinterObstacleTime = 0;
       
       // Winter collectible spawning variables (kjelke with 15 points)
@@ -490,8 +495,19 @@ const canvas = document.getElementById("gameCanvas");
       const winterSideObstacleFrequency = 700; // Mountain obstacles on sides
       let lastWinterSideObstacleTime = 0;
       
+      // Winter obstacle spawn delay (5 seconds after winter scene starts)
+      const winterObstacleSpawnDelay = 5000; // 5 seconds in milliseconds
+      let winterObstacleSpawnStartTime = 0;
+      
       // Winter fog effect variables
       let winterFogActive = false;
+      
+      // Pre-winter warning variables (2-second speed decrease before winter scene)
+      let preWinterWarningActive = false;
+      const preWinterWarningDuration = 2000; // 2 seconds in milliseconds
+      let preWinterWarningTimer = 0;
+      let preWinterOriginalPlayerSpeed = 700; // Store original speed for gradual decrease
+      let preWinterOriginalTrackSpeed = 600; // Store original track speed for gradual decrease
       
       // Solan car obstacle spawning counter
       let solanObstacleCounter = 0;
@@ -1209,6 +1225,10 @@ const canvas = document.getElementById("gameCanvas");
       const SPEED_INCREASE_PER_POINT = 10; // pixels per second increase per point (aggressive difficulty scaling)
       const SPEED_INCREASE_PER_10_SECONDS = 8; // pixels per second increase every 10 seconds
       const MAX_SPEED_MULTIPLIER = 8; // maximum speed (8x base speed for extreme challenge)
+      
+      // Winter scene speed constants
+      const WINTER_GAME_SPEED = 0.5; // Very slow game speed during winter
+      const WINTER_PLAYER_MOVEMENT_SPEED = 1400; // 2x faster navigation (700 * 2) for responsive winter controls
 
       // Function to update game speed based on score and time
       function updateGameSpeed() {
@@ -1337,8 +1357,13 @@ const canvas = document.getElementById("gameCanvas");
         const canvasDisplayWidth = canvas.getBoundingClientRect().width;
         const canvasDisplayHeight = canvas.getBoundingClientRect().height;
         
-        // Calculate precise tap movement distance (same perfect sensitivity)
-        const tapDistance = isMobile() ? 30 : 50;
+        // Calculate precise tap movement distance (more sensitive on desktop during winter)
+        let tapDistance = isMobile() ? 30 : 50;
+        
+        // Make navigation more sensitive on desktop during winter scene (snowy conditions)
+        if (!isMobile() && winterSceneActive) {
+          tapDistance = 35; // Reduced from 50 to 35 for more sensitive winter navigation
+        }
         
         // Apply immediate position change (not velocity)
         if (side === 'left' && player.x > 0) {
@@ -1816,14 +1841,14 @@ const canvas = document.getElementById("gameCanvas");
           }
         } else { // desperados
           if (isTablet()) {
-            width = 110;   // Same as desktop size
-            height = 80;
+            width = 102;   // Reduced by 8px (was 110)
+            height = 72;   // Reduced by 8px (was 80)
           } else if (isMobile()) {
-            width = 60;    // Better proportioned base for smartphones
-            height = 50;
+            width = 52;    // Reduced by 8px (was 60)
+            height = 42;   // Reduced by 8px (was 50)
           } else {
-            width = 110;   // Desktop
-            height = 80;
+            width = 102;   // Desktop - reduced by 8px (was 110)
+            height = 72;   // Reduced by 8px (was 80)
           }
         }
         
@@ -1898,14 +1923,14 @@ const canvas = document.getElementById("gameCanvas");
             }
           } else { // desperados
             if (isMobile()) {
-              width = 55 * sideObstacleMultiplier;  // Smaller base for smartphones
-              height = 55 * sideObstacleMultiplier;
+              width = 47 * sideObstacleMultiplier;  // Reduced by 8px (was 55)
+              height = 47 * sideObstacleMultiplier;
             } else if (isTablet()) {
-              width = 80 * sideObstacleMultiplier;  // Medium base for tablets
-              height = 80 * sideObstacleMultiplier;
+              width = 72 * sideObstacleMultiplier;  // Reduced by 8px (was 80)
+              height = 72 * sideObstacleMultiplier;
             } else {
-              width = 90 * sideObstacleMultiplier;  // Desktop
-              height = 90 * sideObstacleMultiplier;
+              width = 82 * sideObstacleMultiplier;  // Desktop - reduced by 8px (was 90)
+              height = 82 * sideObstacleMultiplier;
             }
           }
           
@@ -1931,16 +1956,16 @@ const canvas = document.getElementById("gameCanvas");
         const type = 'snow';
         
         let width, height;
-        // Snow obstacle sizes
+        // Snow obstacle sizes (reduced by ~25% for better navigation)
         if (isTablet()) {
-          width = 70;    // Tablet size
-          height = 70;
+          width = 52;    // Tablet size (was 70)
+          height = 52;
         } else if (isMobile()) {
-          width = 45;    // Mobile size
-          height = 45;
+          width = 35;    // Mobile size (was 45)
+          height = 35;
         } else {
-          width = 60;    // Desktop size
-          height = 60;
+          width = 45;    // Desktop size (was 60)
+          height = 45;
         }
         
         // Apply tablet scaling
@@ -2113,6 +2138,10 @@ const canvas = document.getElementById("gameCanvas");
         showDesertMessage = false;
         desertMessageTimer = 0;
         
+        // Reset winter hint message variables
+        showWinterHint = false;
+        winterHintTimer = 0;
+        
         // Reset radar effect variables
         radarActive = false;
         radarTimer = 0;
@@ -2140,6 +2169,13 @@ const canvas = document.getElementById("gameCanvas");
         preWinterTrackSpeed = BASE_TRACK_SPEED;
         preWinterPlayerSpeed = BASE_PLAYER_SPEED;
         winterFogActive = false;
+        winterObstacleSpawnStartTime = 0;
+        
+        // Reset pre-winter warning variables
+        preWinterWarningActive = false;
+        preWinterWarningTimer = 0;
+        preWinterOriginalPlayerSpeed = BASE_PLAYER_SPEED;
+        preWinterOriginalTrackSpeed = BASE_TRACK_SPEED;
         
         // Reset Solan obstacle counter
         solanObstacleCounter = 0;
@@ -2303,8 +2339,8 @@ const canvas = document.getElementById("gameCanvas");
         const seconds = Math.floor(gameTime / 1000);
 
         // Update game speed continuously (for both time and score increases)
-        // Skip speed updates during desert scene to maintain base speed
-        if (!desertSceneActive) {
+        // Skip speed updates during desert scene and winter scenes to maintain controlled speeds
+        if (!desertSceneActive && !preWinterWarningActive && !winterSceneActive) {
           updateGameSpeed();
         }
 
@@ -2338,16 +2374,16 @@ const canvas = document.getElementById("gameCanvas");
         trackY += currentTrackSpeed * (deltaTime / 1000);
         if (trackY >= canvas.height) trackY = 0;
 
-        // Create obstacles (pause spawning during desert scene and winter transition period only)
-        if (!desertSceneActive && !(winterSceneActive && !winterFogActive) && timestamp - lastObstacleTime > obstacleFrequency) {
+        // Create obstacles (pause spawning during desert scene and entire winter scene)
+        if (!desertSceneActive && !winterSceneActive && timestamp - lastObstacleTime > obstacleFrequency) {
           createObstacle();
           lastObstacleTime = timestamp;
         }
 
         // Create collectibles (normal gameplay) - 3x more frequent during Ludvig effect
-        // Pause during desert scene and winter transition period only
+        // Pause during desert scene and entire winter scene
         const currentCollectibleFrequency = ludvigActive ? collectibleFrequency / 3 : collectibleFrequency;
-        if (!desertSceneActive && !(winterSceneActive && !winterFogActive) && timestamp - lastCollectibleTime > currentCollectibleFrequency) {
+        if (!desertSceneActive && !winterSceneActive && timestamp - lastCollectibleTime > currentCollectibleFrequency) {
           createCollectible();
           lastCollectibleTime = timestamp;
         }
@@ -2376,19 +2412,20 @@ const canvas = document.getElementById("gameCanvas");
           lastDesertSideObstacleTime = timestamp;
         }
 
-        // Create winter obstacles (only after visual delay)
-        if (winterSceneActive && winterFogActive && timestamp - lastWinterObstacleTime > winterObstacleFrequency) {
+        // Create winter obstacles (only after visual delay AND 3-second obstacle spawn delay)
+        const obstacleSpawnReady = winterObstacleSpawnStartTime > 0 && (Date.now() - winterObstacleSpawnStartTime) >= winterObstacleSpawnDelay;
+        if (winterSceneActive && winterFogActive && obstacleSpawnReady && timestamp - lastWinterObstacleTime > winterObstacleFrequency) {
           createWinterObstacle();
           lastWinterObstacleTime = timestamp;
         }
 
-        // Create winter collectibles (only after visual delay)
-        if (winterSceneActive && winterFogActive && timestamp - lastWinterCollectibleTime > winterCollectibleFrequency) {
+        // Create winter collectibles (only after visual delay AND 3-second obstacle spawn delay)
+        if (winterSceneActive && winterFogActive && obstacleSpawnReady && timestamp - lastWinterCollectibleTime > winterCollectibleFrequency) {
           createWinterCollectible();
           lastWinterCollectibleTime = timestamp;
         }
 
-        // Create winter side obstacles (only after visual delay)
+        // Create winter side obstacles (only after visual delay - no obstacle spawn delay for side elements)
         if (winterSceneActive && winterFogActive && timestamp - lastWinterSideObstacleTime > winterSideObstacleFrequency) {
           createWinterSideObstacles();
           lastWinterSideObstacleTime = timestamp;
@@ -2776,6 +2813,14 @@ const canvas = document.getElementById("gameCanvas");
           }
         }
 
+        // Update winter hint timer
+        if (showWinterHint) {
+          winterHintTimer -= deltaTime;
+          if (winterHintTimer <= 0) {
+            showWinterHint = false;
+          }
+        }
+
         // Update Ludvig timer
         if (ludvigActive) {
           ludvigTimer -= deltaTime;
@@ -3037,25 +3082,64 @@ const canvas = document.getElementById("gameCanvas");
           }
           
           if (shouldTriggerWinter) {
+            // Start pre-winter warning (2-second speed decrease before winter scene)
+            preWinterWarningActive = true;
+            preWinterWarningTimer = preWinterWarningDuration; // 2 seconds countdown
+            firstWinterCompleted = true; // Mark as completed to prevent future triggers
+            
+            // Store current speeds for gradual decrease during warning period
+            preWinterOriginalPlayerSpeed = currentPlayerSpeed;
+            preWinterOriginalTrackSpeed = currentTrackSpeed;
+            
+            console.log('⚠️ PRE-WINTER WARNING ACTIVATED - Starting 2-second speed decrease');
+          }
+        }
+        
+        // Handle pre-winter warning period (2-second speed decrease)
+        if (preWinterWarningActive) {
+          preWinterWarningTimer -= deltaTime;
+          
+          // Calculate gradual speed decrease over 2 seconds
+          const warningProgress = 1 - (preWinterWarningTimer / preWinterWarningDuration); // 0 to 1
+          const targetPlayerSpeed = WINTER_GAME_SPEED; // 0.5 for very slow winter experience
+          const targetTrackSpeed = BASE_TRACK_SPEED;
+          
+          // Interpolate speeds (works even during radar)
+          currentPlayerSpeed = preWinterOriginalPlayerSpeed - (preWinterOriginalPlayerSpeed - targetPlayerSpeed) * warningProgress;
+          currentTrackSpeed = preWinterOriginalTrackSpeed - (preWinterOriginalTrackSpeed - targetTrackSpeed) * warningProgress;
+          
+          // Update player object speeds (use movement speed for keyboard responsiveness)
+          player.speedX = WINTER_PLAYER_MOVEMENT_SPEED;
+          player.speedY = WINTER_PLAYER_MOVEMENT_SPEED;
+          
+          // When warning period ends, activate full winter scene
+          if (preWinterWarningTimer <= 0) {
+            preWinterWarningActive = false;
+            
+            // Now activate the full winter scene
             winterSceneActive = true;
             winterSceneTimer = winterSceneDuration + winterVisualDelay; // Add delay to total duration
             winterSoundStarted = false;
             winterFogActive = false; // Don't activate fog immediately - wait for delay
-            firstWinterCompleted = true; // Mark as completed to prevent future triggers
             
-            // Store current speeds before resetting to base speeds
+            // Store current speeds (should now be close to target speeds)
             preWinterTrackSpeed = currentTrackSpeed;
             preWinterPlayerSpeed = currentPlayerSpeed;
             
-            // Reset speeds to base speeds during winter scene
+            // Ensure final speeds are exactly what we want
             currentTrackSpeed = BASE_TRACK_SPEED;
-            currentPlayerSpeed = BASE_PLAYER_SPEED;
-            player.speedX = BASE_PLAYER_SPEED;
-            player.speedY = BASE_PLAYER_SPEED;
+            currentPlayerSpeed = WINTER_GAME_SPEED; // 0.5 for very slow winter experience
+            player.speedX = WINTER_PLAYER_MOVEMENT_SPEED; // 200 for responsive keyboard controls
+            player.speedY = WINTER_PLAYER_MOVEMENT_SPEED;
             
-            // Normal obstacles continue during winter scene (not cleared)
+            // Set the start time for obstacle spawn delay (5 seconds from now)
+            winterObstacleSpawnStartTime = Date.now();
             
-            console.log('❄️ WINTER SCENE ACTIVATED - Speeds reset to base values, normal obstacles continue');
+            // Trigger winter hint message
+            showWinterHint = true;
+            winterHintTimer = winterHintDuration;
+            
+            console.log('❄️ WINTER SCENE ACTIVATED - Speeds now at target values, normal obstacles continue');
             
             // Stop current background music and mist sounds immediately
             try {
@@ -4008,8 +4092,8 @@ const canvas = document.getElementById("gameCanvas");
               shadowCenterX, shadowCenterY, 0,
               shadowCenterX, shadowCenterY, shadowRadius
             );
-            gradient.addColorStop(0, 'rgba(100, 100, 150, 0.3)'); // Bluish shadow for winter
-            gradient.addColorStop(1, 'rgba(100, 100, 150, 0)');
+            gradient.addColorStop(0, 'rgba(150, 100, 100, 0.4)'); // Red shadow for danger warning
+            gradient.addColorStop(1, 'rgba(150, 100, 100, 0)');
             
             ctx.fillStyle = gradient;
             ctx.beginPath();
@@ -4136,7 +4220,40 @@ const canvas = document.getElementById("gameCanvas");
               ctx.shadowOffsetX = 0;
               ctx.shadowOffsetY = 0;
             } else if (collectible.type === 'kjelke') {
-              // Draw kjelke (winter collectible with 15 points)
+              // Draw kjelke (winter collectible with 15 points) with gold glow
+              
+              // Create gold glow effect
+              const glowRadius = Math.max(collectible.width, collectible.height) / 2 + 12;
+              const glowCenterX = collectible.x + collectible.width / 2;
+              const glowCenterY = collectible.y + collectible.height / 2;
+              
+              // Outer gold glow
+              const outerGlow = ctx.createRadialGradient(
+                glowCenterX, glowCenterY, 0,
+                glowCenterX, glowCenterY, glowRadius
+              );
+              outerGlow.addColorStop(0, 'rgba(255, 215, 0, 0.6)'); // Gold
+              outerGlow.addColorStop(0.7, 'rgba(255, 215, 0, 0.3)');
+              outerGlow.addColorStop(1, 'rgba(255, 215, 0, 0)');
+              
+              ctx.fillStyle = outerGlow;
+              ctx.beginPath();
+              ctx.arc(glowCenterX, glowCenterY, glowRadius, 0, 2 * Math.PI);
+              ctx.fill();
+              
+              // Inner bright glow
+              const innerGlow = ctx.createRadialGradient(
+                glowCenterX, glowCenterY, 0,
+                glowCenterX, glowCenterY, glowRadius * 0.6
+              );
+              innerGlow.addColorStop(0, 'rgba(255, 255, 0, 0.4)'); // Bright yellow
+              innerGlow.addColorStop(1, 'rgba(255, 255, 0, 0)');
+              
+              ctx.fillStyle = innerGlow;
+              ctx.beginPath();
+              ctx.arc(glowCenterX, glowCenterY, glowRadius * 0.6, 0, 2 * Math.PI);
+              ctx.fill();
+              
               if (kjelkeImageLoaded) {
                 ctx.drawImage(
                   kjelkeImage,
@@ -4340,6 +4457,100 @@ const canvas = document.getElementById("gameCanvas");
           ctx.shadowOffsetY = 3;
           
           ctx.fillText(desertMessageText, textX, textY);
+          
+          // Reset shadow
+          ctx.shadowColor = "transparent";
+          ctx.shadowBlur = 0;
+          ctx.shadowOffsetX = 0;
+          ctx.shadowOffsetY = 0;
+        }
+
+        // Draw winter hint message with kjelke image
+        if (showWinterHint) {
+          // Define responsive image dimensions based on device type
+          const isMobileDevice = isMobile();
+          const displayWidth = canvas.getBoundingClientRect().width;
+          const displayHeight = canvas.getBoundingClientRect().height;
+          
+          // Responsive image sizing: smaller on mobile, larger on desktop
+          const imageWidth = isMobileDevice ? Math.min(60, displayWidth * 0.15) : 80;
+          const imageHeight = isMobileDevice ? Math.min(60, displayHeight * 0.1) : 80;
+          
+          // Responsive font size for hint message
+          const fontSize = isMobileDevice ? Math.max(18, Math.min(24, displayWidth * 0.045)) : 28;
+          ctx.font = `bold ${fontSize}px Arial`;
+          
+          // Responsive gap between image and text
+          const gap = isMobileDevice ? Math.max(10, displayWidth * 0.025) : 20;
+          
+          // Calculate positions with responsive values
+          const hintText = "Hint: catch the kjelke";
+          const textWidth = ctx.measureText(hintText).width;
+          const totalWidth = imageWidth + gap + textWidth;
+          const startX = displayWidth / 2 - totalWidth / 2; // Center the combined image and text
+          const imageX = Math.max(10, startX); // Image on the left with minimum margin
+          
+          // Position based on device type: under scoreboards for mobile, top for desktop
+          let imageY, textY;
+          if (isMobileDevice) {
+            // Mobile: position under scoreboards
+            const scoreboardHeight = 80; // Estimated height of scoreboards area
+            const marginFromScoreboards = 15; // Small margin under scoreboards
+            imageY = scoreboardHeight + marginFromScoreboards;
+            textY = imageY + imageHeight / 2 + (fontSize * 0.3);
+          } else {
+            // Desktop: position at top
+            imageY = 25;
+            textY = imageY + imageHeight / 2 + (fontSize * 0.3);
+          }
+          
+          const textX = imageX + imageWidth + gap; // Text to the right of the image
+
+          // Draw the kjelke image to the left with winter glow
+          if (kjelkeImageLoaded) {
+            // Add winter glow effect around kjelke image
+            const glowRadius = Math.max(imageWidth, imageHeight) / 2 + 8;
+            const glowCenterX = imageX + imageWidth / 2;
+            const glowCenterY = imageY + imageHeight / 2;
+            
+            // Winter blue glow
+            const winterGlow = ctx.createRadialGradient(
+              glowCenterX, glowCenterY, 0,
+              glowCenterX, glowCenterY, glowRadius
+            );
+            winterGlow.addColorStop(0, 'rgba(173, 216, 230, 0.6)'); // Light blue
+            winterGlow.addColorStop(0.7, 'rgba(173, 216, 230, 0.3)');
+            winterGlow.addColorStop(1, 'rgba(173, 216, 230, 0)');
+            
+            ctx.fillStyle = winterGlow;
+            ctx.beginPath();
+            ctx.arc(glowCenterX, glowCenterY, glowRadius, 0, 2 * Math.PI);
+            ctx.fill();
+            
+            ctx.drawImage(
+              kjelkeImage,
+              imageX,
+              imageY,
+              imageWidth,
+              imageHeight
+            );
+          } else {
+            // Fallback if image fails to load
+            ctx.fillStyle = "#8B4513"; // Brown color for kjelke
+            ctx.fillRect(imageX, imageY, imageWidth, imageHeight);
+          }
+
+          // Draw the winter hint text to the right of the image
+          ctx.fillStyle = "#87CEEB"; // Sky blue color for winter theme
+          ctx.textAlign = "left"; // Align text to the left for precise positioning
+          
+          // Add text shadow for better readability with winter theme
+          ctx.shadowColor = "rgba(0, 0, 0, 0.8)";
+          ctx.shadowBlur = 6;
+          ctx.shadowOffsetX = 2;
+          ctx.shadowOffsetY = 2;
+          
+          ctx.fillText(hintText, textX, textY);
           
           // Reset shadow
           ctx.shadowColor = "transparent";
