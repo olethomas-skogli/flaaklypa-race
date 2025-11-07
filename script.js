@@ -2199,8 +2199,8 @@ function createObstacle() {
     width = 80;
     height = 80;
   } else if (isMobile()) {
-    width = 18; // Optimized 18px base size for smartphones
-    height = 18;
+    width = 38; // Optimized 38px base size for smartphones
+    height = 38;
   } else {
     width = 60; // Desktop
     height = 60;
@@ -2219,7 +2219,7 @@ function createObstacle() {
       if (isTablet()) {
         width = 120; // Much larger base for tablets
       } else if (isMobile()) {
-        width = 18; // Consistent 18px size for smartphones
+        width = 28; // Special 28px size for desperados
       } else {
         width = 100; // Desktop
       }
@@ -2592,8 +2592,8 @@ function createDesertObstacle() {
       width = 80; // Same as desktop size
       height = 120;
     } else if (isMobile()) {
-      width = 18; // Consistent 18px size for smartphones
-      height = 18; // Consistent 18px size for smartphones
+      width = 38; // Consistent 38px size for smartphones
+      height = 38; // Consistent 38px size for smartphones
     } else {
       width = 80; // Desktop
       height = 120;
@@ -2603,8 +2603,8 @@ function createDesertObstacle() {
       width = 90; // Same as desktop size
       height = 70;
     } else if (isMobile()) {
-      width = 18; // Consistent 18px size for smartphones
-      height = 18; // Consistent 18px size for smartphones
+      width = 38; // Consistent 38px size for smartphones
+      height = 38; // Consistent 38px size for smartphones
     } else {
       width = 90; // Desktop
       height = 70;
@@ -2615,8 +2615,8 @@ function createDesertObstacle() {
       width = 102; // Reduced by 8px (was 110)
       height = 72; // Reduced by 8px (was 80)
     } else if (isMobile()) {
-      width = 18; // Consistent 18px size for smartphones
-      height = 18; // Consistent 18px size for smartphones
+      width = 28; // Special 28px size for desperados
+      height = 28; // Special 28px size for desperados
     } else {
       width = 102; // Desktop - reduced by 8px (was 110)
       height = 72; // Reduced by 8px (was 80)
@@ -2733,8 +2733,8 @@ function createWinterObstacle() {
     width = 52; // Tablet size (was 70)
     height = 52;
   } else if (isMobile()) {
-    width = 18; // Consistent 18px size for smartphones
-    height = 18;
+    width = 38; // Consistent 38px size for smartphones
+    height = 38;
   } else {
     width = 45; // Desktop size (was 60)
     height = 45;
