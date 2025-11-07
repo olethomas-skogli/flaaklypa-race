@@ -1691,7 +1691,7 @@ function getDeviceSizeMultiplier() {
 
 function getObstacleSizeMultiplier() {
   if (isTablet()) return 1.2; // Tablet: 20% larger obstacles
-  if (isMobile()) return 1.4; // Mobile/Smartphone: Reduced from 1.8x to 1.4x for better gameplay balance
+  if (isMobile()) return 1.0; // Mobile/Smartphone: No scaling for precise 28px size
   return 1.0; // Desktop: normal size
 }
 
@@ -2199,8 +2199,8 @@ function createObstacle() {
     width = 80;
     height = 80;
   } else if (isMobile()) {
-    width = 40; // Perfect 40px base size for smartphones
-    height = 40;
+    width = 28; // Optimized 28px base size for smartphones
+    height = 28;
   } else {
     width = 60; // Desktop
     height = 60;
