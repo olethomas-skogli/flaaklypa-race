@@ -479,6 +479,11 @@ let showWinterHint = false;
 let winterHintTimer = 0;
 const winterHintDuration = 3000; // Display winter hint for 3 seconds
 
+// Level message variables (for new cycle starts)
+let showLevelMessage = false;
+let levelMessageTimer = 0;
+const levelMessageDuration = 3000; // Display level message for 3 seconds
+
 // Radar effect variables
 let radarActive = false;
 let radarTimer = 0;
@@ -575,6 +580,14 @@ const rainDuration = 3000; // 3 seconds of rain
 const thunderDuration = 6000; // 6 seconds of thunder
 let rainTimer = 0;
 let thunderTimer = 0;
+
+// Lightning effect variables
+let lightningActive = false;
+const lightningDuration = 3000; // 3 seconds of lightning strikes
+let lightningTimer = 0;
+let lightningFlashTimer = 0;
+const lightningFlashInterval = 200; // Flash every 200ms
+let lightningVisible = false;
 const rainDrops = []; // Array to hold rain drop particles
 const maxRainDrops = 100; // Maximum number of rain drops on screen
 let lastRainSpawnTime = 0;
@@ -603,6 +616,10 @@ let solanObstacleCounter = 0;
 
 // Track what caused game over
 let gameOverCause = "default";
+
+// Track game over count for "you idiot" feature (every second game over)
+let gameOverCount = 0;
+let nonDesperadosGameOverCount = 0; // Track non-desperados game overs for "you idiot" pattern
 
 // Side obstacle spawning pattern - alternating both sides with opposite flows
 const sidePattern = ["mountain", "tree", "tree", "stand"]; // 4-step repeating cycle
@@ -727,9 +744,10 @@ const salamSalamSound = new Howl({
   },
 });
 
-// Game over sounds - default and desperados
+// Game over sounds - default, desperados, and you-idiot
 let gameOverSound;
 let desperadosGameOverSound;
+let youIdiotSound;
 
 try {
   gameOverSound = new Howl({
@@ -780,6 +798,26 @@ try {
       console.warn("Desperados game over sound failed to play:", error);
     },
   });
+
+  // You-idiot game over sound (for every second game over)
+  youIdiotSound = new Howl({
+    src: ["you-idiot.mp3"],
+    volume: 0.8,
+    loop: false,
+    autoplay: false,
+    html5: true,
+    pool: 1,
+    preload: true,
+    onload: function () {
+      console.log("You-idiot game over sound loaded successfully");
+    },
+    onloaderror: function (id, error) {
+      console.warn("You-idiot game over sound failed to load:", error);
+    },
+    onplayerror: function (id, error) {
+      console.warn("You-idiot game over sound failed to play:", error);
+    },
+  });
 } catch (e) {
   console.warn("Error creating game over sound, using fallback:", e);
   gameOverSound = new Howl({
@@ -791,6 +829,7 @@ try {
     pool: 1,
   });
   desperadosGameOverSound = gameOverSound; // Use same fallback
+  youIdiotSound = gameOverSound; // Use same fallback
 }
 
 // Point collection sound
@@ -1779,6 +1818,7 @@ function updateMusicSpeed() {
 // Game speed constants (pixels per second for consistent speed across devices)
 const BASE_TRACK_SPEED = 600; // starting speed in pixels per second
 const BASE_PLAYER_SPEED = 700; // starting speed in pixels per second
+const CYCLE_DESERT_WINTER_SPEED_BOOST = 1.1; // 10% speed boost for desert/winter in cycle 2+
 const SPEED_INCREASE_PER_POINT = 10; // pixels per second increase per point (aggressive difficulty scaling)
 const SPEED_INCREASE_PER_10_SECONDS = 8; // pixels per second increase every 10 seconds
 // Professional per-cycle max speed system (replacing static MAX_SPEED_MULTIPLIER)
@@ -1787,6 +1827,65 @@ function getCycleMaxSpeed(cycle) {
     return CYCLE_MAX_SPEEDS[cycle - 1]; // Arrays are 0-indexed, cycles are 1-indexed
   }
   return CYCLE_MAX_SPEEDS[CYCLE_MAX_SPEEDS.length - 1]; // Use final speed for cycles 4+
+}
+
+// Get cycle-aware base speeds for desert and winter scenes
+function getCycleAwareBaseSpeed() {
+  if (currentCycle >= 2) {
+    return {
+      trackSpeed: BASE_TRACK_SPEED * CYCLE_DESERT_WINTER_SPEED_BOOST,
+      playerSpeed: BASE_PLAYER_SPEED * CYCLE_DESERT_WINTER_SPEED_BOOST
+    };
+  }
+  return {
+    trackSpeed: BASE_TRACK_SPEED,
+    playerSpeed: BASE_PLAYER_SPEED
+  };
+}
+
+// Play appropriate game over sound based on game over count and cause
+function playGameOverSound() {
+  try {
+    if (gameOverCause === "desperados") {
+      // Always play desperados sound for desperados obstacles
+      console.log(`🔊 Playing DESPERADOS sound for game over #${gameOverCount}`);
+      if (
+        desperadosGameOverSound &&
+        desperadosGameOverSound.state() === "loaded"
+      ) {
+        desperadosGameOverSound.play();
+      } else {
+        console.warn(
+          "Desperados game over sound not ready, attempting to play anyway"
+        );
+        desperadosGameOverSound && desperadosGameOverSound.play();
+      }
+    } else if (nonDesperadosGameOverCount % 2 === 0 && nonDesperadosGameOverCount > 0) {
+      // Play you-idiot sound for every second non-desperados game over
+      console.log(`🔊 Playing YOU IDIOT sound for non-desperados game over #${nonDesperadosGameOverCount}`);
+      if (youIdiotSound && youIdiotSound.state() === "loaded") {
+        youIdiotSound.play();
+      } else {
+        console.warn(
+          "You-idiot game over sound not ready, attempting to play anyway"
+        );
+        youIdiotSound && youIdiotSound.play();
+      }
+    } else {
+      // Play default game over sound for normal obstacles
+      console.log(`🔊 Playing DEFAULT sound for non-desperados game over #${nonDesperadosGameOverCount}`);
+      if (gameOverSound && gameOverSound.state() === "loaded") {
+        gameOverSound.play();
+      } else {
+        console.warn(
+          "Game over sound not ready, attempting to play anyway"
+        );
+        gameOverSound && gameOverSound.play();
+      }
+    }
+  } catch (e) {
+    console.warn("Error playing game over sound:", e);
+  }
 }
 
 // Winter scene speed constants
@@ -1810,15 +1909,36 @@ function updateGameSpeed() {
 
   // Professional gradual speed multiplier progression within cycle
   const cycleMaxSpeed = getCycleMaxSpeed(currentCycle);
-  const progressionRate = 0.0001; // How fast multiplier increases per millisecond
-  const timeBonusMultiplier = gameTime * progressionRate;
-  const scoreBonusMultiplier = (score / 1000) * 0.1; // Small bonus per 1000 points
-
+  
+  // Calculate cycle-based speed boost (higher starting speed for later cycles)
+  const cycleSpeedBoost = Math.min((currentCycle - 1) * 0.1, 0.6); // +10% per cycle, capped at +60%
+  
+  // Ensure minimum starting speed for cycle 2+ (1.1x as mentioned by user)  
+  const minimumCycleSpeed = currentCycle >= 2 ? 1.1 : CYCLE_START_SPEED;
+  const effectiveStartSpeed = Math.max(CYCLE_START_SPEED + cycleSpeedBoost, minimumCycleSpeed);
+  
+  // Enhanced speed progression: gradually increase from start speed to max over time
+  // Speed should reach max by the time desert scene triggers (30 seconds)
+  const targetProgressionTime = 30000; // 30 seconds in milliseconds to match desert trigger
+  const progressionFactor = Math.min(gameTime / targetProgressionTime, 1.0); // Cap at 1.0 (100%)
+  
+  // Calculate target speed using linear interpolation from start to max
+  const speedRange = cycleMaxSpeed - effectiveStartSpeed;
+  const progressionSpeedBonus = speedRange * progressionFactor;
+  
+  // Add small score bonus for reaching milestones
+  const scoreBonusMultiplier = (score / 1000) * 0.05; // Reduced bonus per 1000 points
+  
   // Gradually increase speed multiplier toward cycle maximum
   currentSpeedMultiplier = Math.min(
-    CYCLE_START_SPEED + timeBonusMultiplier + scoreBonusMultiplier,
+    effectiveStartSpeed + progressionSpeedBonus + scoreBonusMultiplier,
     cycleMaxSpeed
   );
+
+  // Debug logging for cycle 2 speed progression (every 5 seconds during cycle 2)
+  if (currentCycle === 2 && Math.floor(gameTime / 5000) !== Math.floor((gameTime - 16.67) / 5000)) {
+    console.log(`🎯 Cycle 2 Speed Debug: Time=${Math.floor(gameTime/1000)}s | Speed=${currentSpeedMultiplier.toFixed(3)}x | Target=${cycleMaxSpeed}x | Progress=${(progressionFactor * 100).toFixed(1)}%`);
+  }
 
   // Professional controlled speed progression system (use already calculated cycleMaxSpeed)
   const maxTrackSpeed = BASE_TRACK_SPEED * cycleMaxSpeed;
@@ -1908,24 +2028,37 @@ const keys = {
   ArrowDown: false,
 };
 document.addEventListener("keydown", (e) => {
+  // Handle restart functionality with 'R' key during game over
+  if (gameOver && (e.key === "r" || e.key === "R")) {
+    console.log("🎮 R key pressed - restarting game with preserved counters");
+    e.preventDefault();
+    try {
+      restartGame();
+      console.log("✅ R key restart successful");
+    } catch (error) {
+      console.error("❌ R key restart failed:", error);
+      // Fallback to basic reset
+      try {
+        resetGame(false);
+        console.log("⚠️ R key fallback: used basic reset");
+      } catch (fallbackError) {
+        console.error("💥 Critical error - both restart methods failed:", fallbackError);
+      }
+    }
+    return; // Exit early to avoid processing as movement key
+  }
+  
+  // Handle movement keys (only when game is active)
   if (e.key in keys) {
     e.preventDefault(); // Prevent default scrolling behavior
     keys[e.key] = true;
   }
 });
+
 document.addEventListener("keyup", (e) => {
   if (e.key in keys) {
     e.preventDefault(); // Prevent default scrolling behavior
     keys[e.key] = false;
-  }
-});
-
-// Add restart functionality with 'R' key during game over
-document.addEventListener("keydown", (e) => {
-  if (gameOver && (e.key === "r" || e.key === "R")) {
-    e.preventDefault();
-    resetGame();
-    console.log("Game restarted with R key");
   }
 });
 
@@ -2360,7 +2493,7 @@ function createCollectible() {
   if (
     score >= 30 &&
     gameTime - lastLudvigSpawn > ludvigSpawnCooldown &&
-    Math.random() < 0.15
+    Math.random() < 0.45
   ) {
     // Ludvig spawn: 15% chance, only after 30 points, with cooldown
     type = "ludvig";
@@ -2692,8 +2825,28 @@ function createWrenchCollectible() {
   collectibles.push({ x, y: -50, width, height, type, points });
 }
 
-// Reset the game state
-function resetGame() {
+// Simple wrapper function to restart game while preserving "You idiot" counters
+function restartGame() {
+  try {
+    resetGame(true); // Call resetGame with counter preservation
+    console.log("✅ Game restarted successfully - counters preserved");
+  } catch (error) {
+    console.error("❌ Error in restartGame():", error);
+    // Fallback to regular reset if something goes wrong
+    resetGame(false);
+    console.log("⚠️ Fallback: Game reset with counters cleared");
+  }
+}
+
+// Reset the game state with optional counter preservation
+function resetGame(preserveCounters = false) {
+  // Store counters if preserving them
+  const savedCounters = preserveCounters ? {
+    gameOverCount,
+    nonDesperadosGameOverCount
+  } : null;
+  
+  console.log(`🔄 ${preserveCounters ? 'Restarting' : 'Resetting'} game - Counters: ${preserveCounters ? 'preserved' : 'reset'}`);
   score = 0;
   gameOver = false;
   gameTime = 0;
@@ -2782,6 +2935,8 @@ function resetGame() {
   // Reset winter hint message variables
   showWinterHint = false;
   winterHintTimer = 0;
+  showLevelMessage = false;
+  levelMessageTimer = 0;
 
   // Reset radar effect variables
   radarActive = false;
@@ -2816,8 +2971,10 @@ function resetGame() {
   rainActive = false;
   rainTriggered = false;
   thunderActive = false;
+  lightningActive = false;
   rainTimer = 0;
   thunderTimer = 0;
+  lightningTimer = 0;
   rainDrops.length = 0;
 
   // Reset sun effect variables
@@ -2836,8 +2993,17 @@ function resetGame() {
   // Reset Solan obstacle counter
   solanObstacleCounter = 0;
 
-  // Reset game over cause
+  // Reset game over cause and counters (restore if preserving)
   gameOverCause = "default";
+  if (savedCounters) {
+    gameOverCount = savedCounters.gameOverCount;
+    nonDesperadosGameOverCount = savedCounters.nonDesperadosGameOverCount;
+    console.log(`✅ Counters restored - Total: ${gameOverCount}, Non-desperados: ${nonDesperadosGameOverCount}`);
+  } else {
+    gameOverCount = 0;
+    nonDesperadosGameOverCount = 0;
+    console.log(`🔄 Counters reset to 0`);
+  }
 
   // Reset endless cycle system
   currentCycle = 1;
@@ -2908,9 +3074,19 @@ function resetGame() {
 function restartCycle() {
   console.log(`🔄 Restarting game cycle ${currentCycle} → ${currentCycle + 1}`);
 
-  // Increment cycle and maintain current speed (professional progression)
+  // Increment cycle and implement speed increase for new cycle
   currentCycle++;
-  // Keep current speed instead of resetting to base speed for smooth progression
+  
+  // Set initial speed multiplier higher for each cycle to enable reaching max speeds
+  // Each cycle should start with increased base speed to reach higher maximums faster
+  const cycleSpeedBoost = Math.min((currentCycle - 1) * 0.1, 0.6); // +10% per cycle, capped at +60%
+  currentSpeedMultiplier = CYCLE_START_SPEED + cycleSpeedBoost;
+  
+  // Show level message for new cycle
+  showLevelMessage = true;
+  levelMessageTimer = levelMessageDuration;
+  
+  console.log(`🎯 Level ${currentCycle} started! Speed multiplier: ${currentSpeedMultiplier.toFixed(2)}x (Target: ${getCycleMaxSpeed(currentCycle)}x) - Desert/Winter: ${getCycleAwareBaseSpeed().trackSpeed}px/s`);
 
   // Reset all scene completion flags to restart sequence
   firstRadarCompleted = false;
@@ -2953,8 +3129,10 @@ function restartCycle() {
   rainActive = false;
   rainTriggered = false;
   thunderActive = false;
+  lightningActive = false;
   rainTimer = 0;
   thunderTimer = 0;
+  lightningTimer = 0;
   rainDrops.length = 0;
 
   // Reset sun effect variables
@@ -3011,6 +3189,7 @@ function restartCycle() {
   missedRadarAttempts = 0;
   solanObstacleCounter = 0;
   gameOverCause = "default";
+  // Note: Don't reset gameOverCount or nonDesperadosGameOverCount here - they should persist across cycles
 
   // Reset time bonus timer for new cycle (keep active if it was active)
   lastTimeBonusAwarded = 0; // Reset timer so it starts fresh in new cycle
@@ -3048,17 +3227,25 @@ async function update(timestamp) {
   if (gameOver) {
     let gameOverImageSrc, gameOverTextContent;
 
+    // Handle all three game over types with separate logic
     if (gameOverCause === "desperados") {
-      // Special desperados game over
+      // Always show desperados game over when hitting Solan car
       gameOverImageSrc = "desperados-game-over.png";
       gameOverTextContent = "Game Over, shrablæblæblæblærabæla!";
+      console.log(`🏜️ Desperados game over! Counters: ${gameOverCount}/${nonDesperadosGameOverCount}`);
+    } else if (nonDesperadosGameOverCount % 2 === 0 && nonDesperadosGameOverCount > 0) {
+      // You idiot game over (every second non-desperados game over)
+      gameOverImageSrc = "ben-redic-message.png";
+      gameOverTextContent = "You idiot!!!";
+      console.log(`🤬 YOU IDIOT triggered! Non-desperados game over #${nonDesperadosGameOverCount}`);
     } else {
-      // Default game over logic
+      // Default game over logic for normal obstacles
       gameOverImageSrc = score >= 100 ? "ali-ali.png" : "suppehue.gif";
       gameOverTextContent =
         score >= 100
           ? `Game Over, Ali-Ali do kjore bra!🧞`
           : `Game Over, Suppehua!😵‍💫`;
+      console.log(`💀 Normal game over! Non-desperados game over #${nonDesperadosGameOverCount}`);
     }
 
     const gameOverScoreContent = `Final Score: ${score}`;
@@ -3345,9 +3532,9 @@ async function update(timestamp) {
     }
   }
 
-  // Update collectibles (use base speed during desert scene)
+  // Update collectibles (use cycle-aware base speed during desert scene)
   collectibles.forEach((collectible) => {
-    const speed = desertSceneActive ? BASE_TRACK_SPEED : currentTrackSpeed;
+    const speed = desertSceneActive ? BASE_TRACK_SPEED : currentTrackSpeed; // Use base speed during desert scene
     collectible.y += speed * (deltaTime / 1000);
   });
 
@@ -3648,7 +3835,7 @@ async function update(timestamp) {
       radarSpawnCount = 0; // Reset radar spawn count for next mist
       // Remove mist-active class to hide radar
       document.body.classList.remove("mist-active");
-      // Stop sabotage sound when mist ends and restore background music
+      // ALWAYS stop sabotage sound when mist ends, regardless of radar collection status
       manageSabotageSound("stop", "mist ended naturally");
     }
   }
@@ -3682,6 +3869,14 @@ async function update(timestamp) {
     winterHintTimer -= deltaTime;
     if (winterHintTimer <= 0) {
       showWinterHint = false;
+    }
+  }
+
+  // Update level message timer
+  if (showLevelMessage) {
+    levelMessageTimer -= deltaTime;
+    if (levelMessageTimer <= 0) {
+      showLevelMessage = false;
     }
   }
 
@@ -3724,18 +3919,20 @@ async function update(timestamp) {
         preDesertTrackSpeed = currentTrackSpeed;
         preDesertPlayerSpeed = currentPlayerSpeed;
 
-        // Reset speeds to base (starting game) speeds during desert scene
+        // Reset speeds to base 1.0x during desert scene (classic desert slowdown)
         currentTrackSpeed = BASE_TRACK_SPEED;
         currentPlayerSpeed = BASE_PLAYER_SPEED;
         player.speedX = BASE_PLAYER_SPEED;
         player.speedY = BASE_PLAYER_SPEED;
+        
+        console.log(`🏜️ Desert scene started - speeds reduced to 1.0x (base speed)`);
 
         // Clear normal obstacles to show only desert obstacles (palms/camels)
         obstacles.length = 0;
         sideObstacles.length = 0;
 
         console.log(
-          "🏜️ DESERT SCENE ACTIVATED - Speeds reset to base values, normal obstacles cleared"
+          `🏜️ DESERT SCENE ACTIVATED - Cycle ${currentCycle} speeds: ${currentTrackSpeed}px/s (1.0x base speed), normal obstacles cleared`
         );
 
         // Trigger desert scene message
@@ -3787,11 +3984,13 @@ async function update(timestamp) {
     preDesertTrackSpeed = currentTrackSpeed;
     preDesertPlayerSpeed = currentPlayerSpeed;
 
-    // Reset speeds to base (starting game) speeds during desert scene
+    // Reset speeds to base 1.0x during desert scene (classic desert slowdown)
     currentTrackSpeed = BASE_TRACK_SPEED;
     currentPlayerSpeed = BASE_PLAYER_SPEED;
     player.speedX = BASE_PLAYER_SPEED;
     player.speedY = BASE_PLAYER_SPEED;
+    
+    console.log(`🏜️ Desert scene started - speeds reduced to 1.0x (base speed)`);
 
     // Clear normal obstacles to show only desert obstacles (palms/camels)
     obstacles.length = 0;
@@ -4066,7 +4265,8 @@ async function update(timestamp) {
     const warningProgress =
       1 - preWinterWarningTimer / preWinterWarningDuration; // 0 to 1
     const targetPlayerSpeed = WINTER_GAME_SPEED; // 0.7 for very slow winter experience
-    const targetTrackSpeed = BASE_TRACK_SPEED;
+    const baseSpeed = getCycleAwareBaseSpeed();
+    const targetTrackSpeed = baseSpeed.trackSpeed;
 
     // Interpolate speeds (works even during radar)
     currentPlayerSpeed =
@@ -4095,7 +4295,8 @@ async function update(timestamp) {
       preWinterPlayerSpeed = currentPlayerSpeed;
 
       // Ensure final speeds are exactly what we want
-      currentTrackSpeed = BASE_TRACK_SPEED;
+      const baseSpeed = getCycleAwareBaseSpeed();
+      currentTrackSpeed = baseSpeed.trackSpeed;
       currentPlayerSpeed = WINTER_GAME_SPEED; // 0.7 for very slow winter experience
       player.speedX = WINTER_PLAYER_MOVEMENT_SPEED; // 200 for responsive keyboard controls
       player.speedY = WINTER_PLAYER_MOVEMENT_SPEED;
@@ -4112,7 +4313,7 @@ async function update(timestamp) {
       winterHintTimer = winterHintDuration;
 
       console.log(
-        "❄️ WINTER SCENE ACTIVATED - Speeds now at target values, normal obstacles continue"
+        `❄️ WINTER SCENE ACTIVATED - Cycle ${currentCycle} speeds: ${baseSpeed.trackSpeed}px/s (${currentCycle >= 2 ? '10% faster' : 'base'}), normal obstacles continue`
       );
 
       // Stop current background music and mist sounds immediately
@@ -4127,6 +4328,9 @@ async function update(timestamp) {
           radarSound.stop();
           console.log("❄️ Radar sound stopped for winter scene");
         }
+        // Ensure sabotage sound is stopped when winter scene activates
+        manageSabotageSound("stop", "winter scene activated");
+        console.log("❄️ Sabotage sound stopped for winter scene");
       } catch (e) {
         console.warn("Error stopping sounds for winter scene:", e);
       }
@@ -4161,8 +4365,11 @@ async function update(timestamp) {
       rainTriggered = true;
       rainActive = true;
       thunderActive = true;
+      lightningActive = true;
       rainTimer = rainDuration;
       thunderTimer = thunderDuration;
+      lightningTimer = lightningDuration;
+      lightningFlashTimer = 0;
 
       // Start thunder sound
       if (thunderSound && typeof thunderSound.play === "function") {
@@ -4189,6 +4396,7 @@ async function update(timestamp) {
       thunderTimer -= deltaTime;
       if (thunderTimer <= 0) {
         thunderActive = false;
+        lightningActive = false;
         if (thunderSound && typeof thunderSound.stop === "function") {
           try {
             thunderSound.stop();
@@ -4197,6 +4405,24 @@ async function update(timestamp) {
             console.error("❌ Failed to stop thunder sound:", e);
           }
         }
+      }
+    }
+
+    // Update lightning timer and blinking effect
+    if (lightningActive && lightningTimer > 0) {
+      lightningTimer -= deltaTime;
+      lightningFlashTimer += deltaTime;
+      
+      // Toggle lightning visibility every 200ms for blinking effect
+      if (lightningFlashTimer >= lightningFlashInterval) {
+        lightningVisible = !lightningVisible;
+        lightningFlashTimer = 0;
+      }
+      
+      if (lightningTimer <= 0) {
+        lightningActive = false;
+        lightningVisible = false;
+        console.log("⚡ Lightning stopped after 3 seconds");
       }
     }
 
@@ -4244,8 +4470,10 @@ async function update(timestamp) {
       rainActive = false;
       rainTriggered = false;
       thunderActive = false;
+      lightningActive = false;
       rainTimer = 0;
       thunderTimer = 0;
+      lightningTimer = 0;
       rainDrops.length = 0;
 
       // Clean up sun effect
@@ -4395,43 +4623,19 @@ async function update(timestamp) {
       playerCollisionY + playerCollisionHeight > obstacleCollisionY
     ) {
       gameOver = true;
+      gameOverCount++; // Increment total game over counter
 
-      // Track what caused the game over
+      // Track what caused the game over and increment appropriate counters
       if (obstacle.type === "desperados") {
         gameOverCause = "desperados";
+        // For desperados, only increment total counter (not non-desperados counter)
       } else {
         gameOverCause = "default";
+        nonDesperadosGameOverCount++; // Increment non-desperados counter
       }
 
-      // Play appropriate game over sound based on obstacle type
-      try {
-        if (gameOverCause === "desperados") {
-          // Play desperados sound for desperados obstacles
-          if (
-            desperadosGameOverSound &&
-            desperadosGameOverSound.state() === "loaded"
-          ) {
-            desperadosGameOverSound.play();
-          } else {
-            console.warn(
-              "Desperados game over sound not ready, attempting to play anyway"
-            );
-            desperadosGameOverSound && desperadosGameOverSound.play();
-          }
-        } else {
-          // Play default game over sound
-          if (gameOverSound && gameOverSound.state() === "loaded") {
-            gameOverSound.play();
-          } else {
-            console.warn(
-              "Game over sound not ready, attempting to play anyway"
-            );
-            gameOverSound && gameOverSound.play();
-          }
-        }
-      } catch (e) {
-        console.warn("Error playing game over sound:", e);
-      }
+      // Play appropriate game over sound
+      playGameOverSound();
     }
   });
 
@@ -4478,19 +4682,12 @@ async function update(timestamp) {
       playerCollisionY + playerCollisionHeight > obstacleCollisionY
     ) {
       gameOver = true;
+      gameOverCount++; // Increment total game over counter
+      nonDesperadosGameOverCount++; // Increment non-desperados counter
       gameOverCause = "default"; // Side obstacles use default game over
 
-      // Play default game over sound for side obstacles
-      try {
-        if (gameOverSound && gameOverSound.state() === "loaded") {
-          gameOverSound.play();
-        } else {
-          console.warn("Game over sound not ready, attempting to play anyway");
-          gameOverSound && gameOverSound.play();
-        }
-      } catch (e) {
-        console.warn("Error playing game over sound:", e);
-      }
+      // Play appropriate game over sound
+      playGameOverSound();
     }
   });
 
@@ -4537,19 +4734,12 @@ async function update(timestamp) {
       playerCollisionY + playerCollisionHeight > obstacleCollisionY
     ) {
       gameOver = true;
+      gameOverCount++; // Increment total game over counter
+      nonDesperadosGameOverCount++; // Increment non-desperados counter
       gameOverCause = "default"; // Mountains and trees use default game over
 
-      // Play default game over sound for mountains and trees
-      try {
-        if (gameOverSound && gameOverSound.state() === "loaded") {
-          gameOverSound.play();
-        } else {
-          console.warn("Game over sound not ready, attempting to play anyway");
-          gameOverSound && gameOverSound.play();
-        }
-      } catch (e) {
-        console.warn("Error playing mountain/tree game over sound:", e);
-      }
+      // Play appropriate game over sound
+      playGameOverSound();
     }
   });
 
@@ -4599,43 +4789,19 @@ async function update(timestamp) {
         playerCollisionY + playerCollisionHeight > obstacleCollisionY
       ) {
         gameOver = true;
+        gameOverCount++; // Increment total game over counter
 
-        // Set game over cause based on obstacle type
+        // Set game over cause based on obstacle type and increment appropriate counters
         if (obstacle.type === "desperados") {
           gameOverCause = "desperados"; // Desperados use special dialog and sound
+          // For desperados, only increment total counter (not non-desperados counter)
         } else {
           gameOverCause = "desert"; // Palm and camel use desert game over
+          nonDesperadosGameOverCount++; // Increment non-desperados counter
         }
 
-        // Play appropriate game over sound based on obstacle type
-        try {
-          if (gameOverCause === "desperados") {
-            // Play desperados sound for desperados obstacles
-            if (
-              desperadosGameOverSound &&
-              desperadosGameOverSound.state() === "loaded"
-            ) {
-              desperadosGameOverSound.play();
-            } else {
-              console.warn(
-                "Desperados game over sound not ready, attempting to play anyway"
-              );
-              desperadosGameOverSound && desperadosGameOverSound.play();
-            }
-          } else {
-            // Play default game over sound for palm/camel
-            if (gameOverSound && gameOverSound.state() === "loaded") {
-              gameOverSound.play();
-            } else {
-              console.warn(
-                "Game over sound not ready, attempting to play anyway"
-              );
-              gameOverSound && gameOverSound.play();
-            }
-          }
-        } catch (e) {
-          console.warn("Error playing game over sound:", e);
-        }
+        // Play appropriate game over sound
+        playGameOverSound();
       }
     });
 
@@ -4684,12 +4850,15 @@ async function update(timestamp) {
         playerCollisionY + playerCollisionHeight > obstacleCollisionY
       ) {
         gameOver = true;
+        gameOverCount++; // Increment total game over counter
 
-        // Set game over cause based on obstacle type
+        // Set game over cause based on obstacle type and increment appropriate counters
         if (obstacle.type === "desperados") {
           gameOverCause = "desperados"; // Desperados use special dialog and sound
+          // For desperados, only increment total counter (not non-desperados counter)
         } else {
           gameOverCause = "desert"; // Palm and camel use desert game over
+          nonDesperadosGameOverCount++; // Increment non-desperados counter
         }
 
         // Play appropriate game over sound based on obstacle type
@@ -4775,21 +4944,12 @@ async function update(timestamp) {
         playerCollisionY + playerCollisionHeight > obstacleCollisionY
       ) {
         gameOver = true;
+        gameOverCount++; // Increment total game over counter
+        nonDesperadosGameOverCount++; // Increment non-desperados counter
         gameOverCause = "winter"; // Winter snow obstacle collision
 
-        // Play default game over sound for winter obstacles
-        try {
-          if (gameOverSound && gameOverSound.state() === "loaded") {
-            gameOverSound.play();
-          } else {
-            console.warn(
-              "Game over sound not ready, attempting to play anyway"
-            );
-            gameOverSound && gameOverSound.play();
-          }
-        } catch (e) {
-          console.warn("Error playing winter obstacle game over sound:", e);
-        }
+        // Play appropriate game over sound
+        playGameOverSound();
       }
     });
 
@@ -4834,24 +4994,12 @@ async function update(timestamp) {
         playerCollisionY + playerCollisionHeight > obstacleCollisionY
       ) {
         gameOver = true;
+        gameOverCount++; // Increment total game over counter
+        nonDesperadosGameOverCount++; // Increment non-desperados counter
         gameOverCause = "winter"; // Winter mountain obstacle collision
 
-        // Play default game over sound for winter side obstacles
-        try {
-          if (gameOverSound && gameOverSound.state() === "loaded") {
-            gameOverSound.play();
-          } else {
-            console.warn(
-              "Game over sound not ready, attempting to play anyway"
-            );
-            gameOverSound && gameOverSound.play();
-          }
-        } catch (e) {
-          console.warn(
-            "Error playing winter side obstacle game over sound:",
-            e
-          );
-        }
+        // Play appropriate game over sound
+        playGameOverSound();
       }
     });
   }
@@ -5036,6 +5184,51 @@ function drawSun() {
     ctx.fill();
   });
 
+  ctx.restore();
+}
+
+// Draw lightning effect
+function drawLightning() {
+  if (!lightningActive || !lightningVisible) return;
+
+  const displayWidth = canvas.getBoundingClientRect().width;
+  const displayHeight = canvas.getBoundingClientRect().height;
+
+  ctx.save();
+  
+  // Create a white flash overlay across the screen
+  ctx.globalAlpha = 0.3;
+  ctx.fillStyle = "#FFFFFF";
+  ctx.fillRect(0, 0, displayWidth, displayHeight);
+  
+  // Draw lightning bolts
+  ctx.globalAlpha = 1.0;
+  ctx.strokeStyle = "#FFFF99"; // Light yellow
+  ctx.lineWidth = 3;
+  ctx.shadowColor = "#FFFFFF";
+  ctx.shadowBlur = 15;
+  
+  // Draw multiple lightning bolts at random positions
+  for (let i = 0; i < 3; i++) {
+    const startX = Math.random() * displayWidth;
+    const endX = startX + (Math.random() - 0.5) * 200;
+    const segments = 8;
+    const segmentHeight = displayHeight / segments;
+    
+    ctx.beginPath();
+    ctx.moveTo(startX, 0);
+    
+    let currentX = startX;
+    for (let j = 1; j <= segments; j++) {
+      const targetX = j === segments ? endX : currentX + (Math.random() - 0.5) * 80;
+      const y = j * segmentHeight + (Math.random() - 0.5) * 20;
+      ctx.lineTo(targetX, y);
+      currentX = targetX;
+    }
+    
+    ctx.stroke();
+  }
+  
   ctx.restore();
 }
 
@@ -6025,6 +6218,55 @@ function draw() {
     ctx.shadowOffsetY = 0;
   }
 
+  // Draw level message for new cycle
+  if (showLevelMessage) {
+    // Define responsive dimensions based on device type
+    const isMobileDevice = isMobile();
+    const displayWidth = canvas.getBoundingClientRect().width;
+    const displayHeight = canvas.getBoundingClientRect().height;
+
+    // Responsive font size for level message
+    const fontSize = isMobileDevice
+      ? Math.max(20, Math.min(32, displayWidth * 0.06))
+      : 42;
+    ctx.font = `bold ${fontSize}px Arial`;
+
+    // Level message text
+    const levelText = `Level ${currentCycle}`;
+    const textWidth = ctx.measureText(levelText).width;
+
+    // Center the text horizontally
+    const textX = displayWidth / 2 - textWidth / 2;
+
+    // Position based on device type: center for both mobile and desktop
+    let textY;
+    if (isMobileDevice) {
+      // Mobile: position in center of screen
+      textY = displayHeight / 2;
+    } else {
+      // Desktop: position in center of screen
+      textY = displayHeight / 2;
+    }
+
+    // Draw black border for readability
+    ctx.fillStyle = "black";
+    const borderWidth = 3;
+    for (let x = -borderWidth; x <= borderWidth; x++) {
+      for (let y = -borderWidth; y <= borderWidth; y++) {
+        if (x !== 0 || y !== 0) {
+          ctx.fillText(levelText, textX + x, textY + y);
+        }
+      }
+    }
+
+    // Draw the main cyan text on top (bright and noticeable)
+    ctx.fillStyle = "#00FFFF";
+    ctx.fillText(levelText, textX, textY);
+
+    // Reset text alignment
+    ctx.textAlign = "start";
+  }
+
   // Draw mist overlay if active
   if (mistActive) {
     // Calculate mist opacity based on remaining time
@@ -6122,6 +6364,11 @@ function draw() {
   // Draw rain effect during winter scene
   if (winterSceneActive) {
     drawRain();
+  }
+
+  // Draw lightning effect during winter scene
+  if (winterSceneActive) {
+    drawLightning();
   }
 
   // Draw sun effect during summer phase of winter scene
@@ -6238,7 +6485,7 @@ function draw() {
     const gap = isMobileDevice ? Math.max(10, displayWidth * 0.02) : 20;
 
     // Calculate positions with responsive values
-    const mistMessageText = "Dirty tricks";
+    const mistMessageText = "Dirty tricks 🧨";
     const textWidth = ctx.measureText(mistMessageText).width;
     const totalWidth = imageWidth + gap + textWidth;
     const startX = displayWidth / 2 - totalWidth / 2; // Start position to center the combined image and text
@@ -6459,8 +6706,25 @@ function draw() {
   }
 }
 
-// Add event listener for the unified restart button
-restartButton.addEventListener("click", resetGame);
+// Add event listener for the unified restart button with enhanced error handling
+restartButton.addEventListener("click", () => {
+  console.log("🎮 Restart button clicked - restarting game with preserved counters");
+  try {
+    restartGame();
+    console.log("✅ Button restart successful");
+  } catch (error) {
+    console.error("❌ Button restart failed:", error);
+    // Fallback to basic reset
+    try {
+      resetGame(false);
+      console.log("⚠️ Button fallback: used basic reset");
+    } catch (fallbackError) {
+      console.error("💥 Critical error - both restart methods failed:", fallbackError);
+      // Last resort: reload page
+      window.location.reload();
+    }
+  }
+});
 
 // Add event listener for the back button
 const backButton = document.getElementById("backButton");
