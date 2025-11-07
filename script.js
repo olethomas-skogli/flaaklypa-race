@@ -494,7 +494,7 @@ let ludvigActive = false;
 let ludvigTimer = 0;
 const ludvigDuration = 6000; // 6 seconds in milliseconds
 let lastLudvigSpawn = 0; // Track when last Ludvig was spawned to prevent too frequent spawning
-const ludvigSpawnCooldown = 8000; // 8 seconds minimum between Ludvig spawns
+const ludvigSpawnCooldown = 5000; // 5 seconds minimum between Ludvig spawns (increased frequency)
 
 // Desert scene variables
 let desertSceneActive = false;
@@ -601,6 +601,7 @@ const sunSpawnRate = 100; // Spawn new sun particles every 100ms
 
 // Endless cycle system variables
 let currentCycle = 1; // Track which cycle we're on (1, 2, 3, etc.)
+let cycleTime = 0; // Track time within current cycle (for speed progression)
 
 // Professional controlled speed progression (replacing exponential system)
 const CYCLE_MAX_SPEEDS = [1.45, 1.65, 1.75, 1.8]; // Max speed for cycles 1, 2, 3, 4+
@@ -1690,7 +1691,7 @@ function getDeviceSizeMultiplier() {
 
 function getObstacleSizeMultiplier() {
   if (isTablet()) return 1.2; // Tablet: 20% larger obstacles
-  if (isMobile()) return 1.8; // Mobile/Smartphone: 80% larger for much better visibility
+  if (isMobile()) return 1.4; // Mobile/Smartphone: Reduced from 1.8x to 1.4x for better gameplay balance
   return 1.0; // Desktop: normal size
 }
 
@@ -1917,10 +1918,10 @@ function updateGameSpeed() {
   const minimumCycleSpeed = currentCycle >= 2 ? 1.1 : CYCLE_START_SPEED;
   const effectiveStartSpeed = Math.max(CYCLE_START_SPEED + cycleSpeedBoost, minimumCycleSpeed);
   
-  // Enhanced speed progression: gradually increase from start speed to max over time
-  // Speed should reach max by the time desert scene triggers (30 seconds)
-  const targetProgressionTime = 30000; // 30 seconds in milliseconds to match desert trigger
-  const progressionFactor = Math.min(gameTime / targetProgressionTime, 1.0); // Cap at 1.0 (100%)
+  // Enhanced speed progression: rapidly increase from start speed to max over time
+  // Speed should reach max within 12 seconds for much faster progression before desert scene (30s)
+  const targetProgressionTime = 12000; // 12 seconds in milliseconds for rapid progression
+  const progressionFactor = Math.min(cycleTime / targetProgressionTime, 1.0); // Use cycleTime for proper progression
   
   // Calculate target speed using linear interpolation from start to max
   const speedRange = cycleMaxSpeed - effectiveStartSpeed;
@@ -1935,9 +1936,9 @@ function updateGameSpeed() {
     cycleMaxSpeed
   );
 
-  // Debug logging for cycle 2 speed progression (every 5 seconds during cycle 2)
-  if (currentCycle === 2 && Math.floor(gameTime / 5000) !== Math.floor((gameTime - 16.67) / 5000)) {
-    console.log(`🎯 Cycle 2 Speed Debug: Time=${Math.floor(gameTime/1000)}s | Speed=${currentSpeedMultiplier.toFixed(3)}x | Target=${cycleMaxSpeed}x | Progress=${(progressionFactor * 100).toFixed(1)}%`);
+  // Debug logging for cycle 2 speed progression (every 3 seconds during cycle 2)
+  if (currentCycle === 2 && Math.floor(cycleTime / 3000) !== Math.floor((cycleTime - 16.67) / 3000)) {
+    console.log(`🎯 Cycle 2 Speed Debug: CycleTime=${Math.floor(cycleTime/1000)}s | Speed=${currentSpeedMultiplier.toFixed(3)}x | Target=${cycleMaxSpeed}x | Progress=${(progressionFactor * 100).toFixed(1)}%`);
   }
 
   // Professional controlled speed progression system (use already calculated cycleMaxSpeed)
@@ -1959,6 +1960,34 @@ function updateGameSpeed() {
   // Update player object speeds
   player.speedX = currentPlayerSpeed;
   player.speedY = currentPlayerSpeed;
+}
+
+// Update winter scene speed progression
+function updateWinterSpeed() {
+  if (!winterSceneActive) return;
+  
+  const winterStartSpeed = 0.7; // Start at very slow speed
+  const winterTargetSpeed = getCycleMaxSpeed(currentCycle); // End at cycle max speed
+  
+  // Calculate progression factor (0 to 1) over winter scene duration
+  const winterProgressionFactor = Math.min(winterSceneTimer / winterSceneDuration, 1.0);
+  
+  // Linear interpolation from start speed to target speed
+  const winterSpeedRange = winterTargetSpeed - winterStartSpeed;
+  const winterSpeedBonus = winterSpeedRange * winterProgressionFactor;
+  const winterCurrentMultiplier = winterStartSpeed + winterSpeedBonus;
+  
+  // Apply winter speed progression to track speed only (keep player movement responsive)
+  currentTrackSpeed = BASE_TRACK_SPEED * winterCurrentMultiplier;
+  // Keep player movement speed high for responsive controls during winter
+  currentPlayerSpeed = WINTER_PLAYER_MOVEMENT_SPEED;
+  player.speedX = WINTER_PLAYER_MOVEMENT_SPEED;
+  player.speedY = WINTER_PLAYER_MOVEMENT_SPEED;
+  
+  // Debug logging for winter speed progression (every 3 seconds)
+  if (Math.floor(winterSceneTimer / 3000) !== Math.floor((winterSceneTimer - 16.67) / 3000)) {
+    console.log(`❄️ Winter Speed: ${winterCurrentMultiplier.toFixed(2)}x | Progress: ${(winterProgressionFactor * 100).toFixed(1)}% | Time: ${Math.floor(winterSceneTimer/1000)}s`);
+  }
 }
 
 // Dynamic speed variables (start with controlled base speeds)
@@ -2014,7 +2043,7 @@ const sideObstacles = []; // New array for side obstacles
 const mountainTrees = []; // Array for mountain trees on sides
 const collectibles = [];
 const obstacleFrequency = 1500;
-const collectibleFrequency = 2000;
+const collectibleFrequency = 1500; // Increased frequency from 2000ms to 1500ms (33% more collectibles)
 const sideObstacleFrequency = 500; // Side obstacles spawn much more frequently for closer spacing
 let lastObstacleTime = 0;
 let lastCollectibleTime = 0;
@@ -2071,11 +2100,11 @@ function handleTap(side) {
   const canvasDisplayHeight = canvas.getBoundingClientRect().height;
 
   // Calculate precise tap movement distance (more sensitive on desktop during winter)
-  let tapDistance = isMobile() ? 30 : 50;
+  let tapDistance = isMobile() ? 40 : 50; // Increased mobile sensitivity from 30 to 40
 
-  // Make navigation more sensitive on desktop during winter scene (snowy conditions)
-  if (!isMobile() && winterSceneActive) {
-    tapDistance = 35; // Reduced from 50 to 35 for more sensitive winter navigation
+  // Make navigation more sensitive during winter scene (snowy conditions)
+  if (winterSceneActive) {
+    tapDistance = isMobile() ? 45 : 35; // Enhanced winter sensitivity: mobile 45, desktop 35
   }
 
   // Apply immediate position change (not velocity)
@@ -2850,6 +2879,7 @@ function resetGame(preserveCounters = false) {
   score = 0;
   gameOver = false;
   gameTime = 0;
+  cycleTime = 0; // Reset cycle time for fresh speed progression
   trackY = 0;
   lastObstacleTime = 0;
   lastCollectibleTime = 0;
@@ -3066,6 +3096,7 @@ function resetGame(preserveCounters = false) {
   // Reset timing variables properly
   lastTime = performance.now();
   gameTime = 0;
+  cycleTime = 0; // Reset cycle time for new cycle speed progression
 
   requestAnimationFrame(update);
 }
@@ -3077,10 +3108,10 @@ function restartCycle() {
   // Increment cycle and implement speed increase for new cycle
   currentCycle++;
   
-  // Set initial speed multiplier higher for each cycle to enable reaching max speeds
-  // Each cycle should start with increased base speed to reach higher maximums faster
+  // Set initial speed multiplier using same logic as updateGameSpeed() for consistency
   const cycleSpeedBoost = Math.min((currentCycle - 1) * 0.1, 0.6); // +10% per cycle, capped at +60%
-  currentSpeedMultiplier = CYCLE_START_SPEED + cycleSpeedBoost;
+  const minimumCycleSpeed = currentCycle >= 2 ? 1.1 : CYCLE_START_SPEED;
+  currentSpeedMultiplier = Math.max(CYCLE_START_SPEED + cycleSpeedBoost, minimumCycleSpeed);
   
   // Show level message for new cycle
   showLevelMessage = true;
@@ -3327,6 +3358,7 @@ async function update(timestamp) {
 
   // Update game time
   gameTime += deltaTime;
+  cycleTime += deltaTime; // Update cycle time for speed progression
   const seconds = Math.floor(gameTime / 1000);
 
   // Time-based scoring system (20 points every 10 seconds after first radar)
@@ -3397,7 +3429,7 @@ async function update(timestamp) {
   // Create collectibles (normal gameplay) - 3x more frequent during Ludvig effect
   // Pause during desert scene and entire winter scene
   const currentCollectibleFrequency = ludvigActive
-    ? collectibleFrequency / 3
+    ? 500 // Very frequent during Ludvig (every 500ms)
     : collectibleFrequency;
   if (
     !desertSceneActive &&
@@ -4294,11 +4326,11 @@ async function update(timestamp) {
       preWinterTrackSpeed = currentTrackSpeed;
       preWinterPlayerSpeed = currentPlayerSpeed;
 
-      // Ensure final speeds are exactly what we want
-      const baseSpeed = getCycleAwareBaseSpeed();
-      currentTrackSpeed = baseSpeed.trackSpeed;
-      currentPlayerSpeed = WINTER_GAME_SPEED; // 0.7 for very slow winter experience
-      player.speedX = WINTER_PLAYER_MOVEMENT_SPEED; // 200 for responsive keyboard controls
+      // Initialize winter speed progression (will be handled by updateWinterSpeed)
+      // Start at 0.7x speed, progress to cycle max speed over winter duration
+      currentTrackSpeed = BASE_TRACK_SPEED * 0.7; // Start slow
+      currentPlayerSpeed = WINTER_PLAYER_MOVEMENT_SPEED; // Keep player movement responsive
+      player.speedX = WINTER_PLAYER_MOVEMENT_SPEED;
       player.speedY = WINTER_PLAYER_MOVEMENT_SPEED;
 
       // Set the start time for obstacle spawn delay (5 seconds from now)
@@ -4357,6 +4389,9 @@ async function update(timestamp) {
   // Update winter scene timer
   if (winterSceneActive) {
     winterSceneTimer -= deltaTime;
+    
+    // Update winter speed progression
+    updateWinterSpeed();
 
     // Trigger rain and thunder effect 1.5 seconds after winter scene starts
     const timeElapsedInWinter =
