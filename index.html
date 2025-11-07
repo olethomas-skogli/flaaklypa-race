@@ -112,19 +112,39 @@
       </div>
     </div>
     <div id="scoreContainer">
-      <div id="score">Score: 0</div>
-      <img
-        id="scoreImage"
-        src="aladdin-oil-lamp.png"
-        alt="grand prix"
-        width="60"
-        height="100%"
-        style="margin-right: 8px"
-      />
-      <div id="gameTime">| Time: 0s</div>
-      <div id="speedIndicator">Speed: 1.0x</div>
-      <div id="cycleIndicator">Cycle: 1</div>
-      <div id="fpsCounter">FPS: --</div>
+      <!-- Top Row: Traditional Score Elements -->
+      <div id="scoreTopRow">
+        <div id="score">Score: 0</div>
+        <img
+          id="scoreImage"
+          src="aladdin-oil-lamp.png"
+          alt="grand prix"
+          width="60"
+          height="100%"
+          style="margin-right: 8px"
+        />
+        <div id="gameTime">| Time: 0s</div>
+        <div id="speedIndicator">Speed: 1.0x</div>
+        <div id="cycleIndicator">Cycle: 1</div>
+        <div id="fpsCounter">FPS: --</div>
+      </div>
+      
+      <!-- Bottom Row: Integrated Cycle Progress Bar -->
+      <div id="cycleProgressContainer">
+        <div id="cycleProgressHeader">
+          <span id="cycleProgressLabel">Cycle 1 Progress</span>
+          <span id="cycleProgressPercent">0%</span>
+        </div>
+        <div id="cycleProgressBar">
+          <div id="cycleProgressFill"></div>
+          <div id="cycleProgressStages">
+            <div class="progress-stage" data-stage="normal">Normal</div>
+            <div class="progress-stage" data-stage="desert">Desert</div>
+            <div class="progress-stage" data-stage="winter">Winter</div>
+          </div>
+        </div>
+        <div id="cycleProgressText">Ready to start...</div>
+      </div>
     </div>
 
     <!-- Game Content Wrapper for Desktop Layout -->

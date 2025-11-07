@@ -17,6 +17,22 @@ const canvas = document.getElementById("gameCanvas");
       const leaderboardStatus = document.getElementById("leaderboardStatus");
       const startLeaderboardList = document.getElementById("startLeaderboardList");
       const startLeaderboardStatus = document.getElementById("startLeaderboardStatus");
+      
+      // Professional Cycle Progress Bar Elements (Integrated in Unified Scoreboard)
+      const cycleProgressContainer = document.getElementById("cycleProgressContainer");
+      const cycleProgressLabel = document.getElementById("cycleProgressLabel");
+      const cycleProgressPercent = document.getElementById("cycleProgressPercent");
+      const cycleProgressFill = document.getElementById("cycleProgressFill");
+      const cycleProgressText = document.getElementById("cycleProgressText");
+      const progressStages = document.querySelectorAll(".progress-stage");
+      
+      // Verify unified scoreboard integration
+      console.log('🎯 Unified Scoreboard initialized:', {
+        scoreContainer: !!document.getElementById('scoreContainer'),
+        scoreTopRow: !!document.getElementById('scoreTopRow'),
+        progressContainer: !!cycleProgressContainer,
+        progressElements: progressStages.length
+      });
       const countdownOverlay = document.getElementById("countdownOverlay");
       const countdownText = document.getElementById("countdownText");
       const f1Lights = document.querySelectorAll(".f1-light");
@@ -541,11 +557,37 @@ const canvas = document.getElementById("gameCanvas");
       let preWinterOriginalPlayerSpeed = 700; // Store original speed for gradual decrease
       let preWinterOriginalTrackSpeed = 600; // Store original track speed for gradual decrease
       
+      // Rain effect variables for winter scene
+      let rainActive = false;
+      let thunderActive = false;
+      let rainTriggered = false; // Prevent multiple triggers
+      const rainTriggerDelay = 1500; // 1.5 seconds after winter scene starts
+      const rainDuration = 3000; // 3 seconds of rain
+      const thunderDuration = 6000; // 6 seconds of thunder
+      let rainTimer = 0;
+      let thunderTimer = 0;
+      const rainDrops = []; // Array to hold rain drop particles
+      const maxRainDrops = 100; // Maximum number of rain drops on screen
+      let lastRainSpawnTime = 0;
+      const rainSpawnRate = 50; // Spawn new drops every 50ms
+      
+      // Sun effect variables for summer phase in winter scene
+      const sunParticles = []; // Array to hold sun particles
+      const maxSunParticles = 30; // Maximum number of sun particles on screen
+      let lastSunSpawnTime = 0;
+      const sunSpawnRate = 100; // Spawn new sun particles every 100ms
+      
       // Endless cycle system variables
       let currentCycle = 1; // Track which cycle we're on (1, 2, 3, etc.)
-      let cycleSpeedMultiplier = 1.0; // Current speed multiplier for this cycle
-      const cycleSpeedIncrease = 1.8; // Speed multiplier increase per cycle
+      
+      // Professional controlled speed progression (replacing exponential system)
+      const CYCLE_MAX_SPEEDS = [1.45, 1.65, 1.75, 1.8]; // Max speed for cycles 1, 2, 3, 4+
+      const CYCLE_START_SPEED = 1.0; // All cycles start at base speed
+      let currentSpeedMultiplier = CYCLE_START_SPEED; // Current speed multiplier within cycle
       let cycleCompletionPending = false; // Flag to prevent multiple cycle transitions
+      
+      // Tempo-tempo sound tracking for 10-point milestone
+      let tenPointsReachedThisCycle = false; // Track if 10 points reached in current cycle
       
       // Solan car obstacle spawning counter
       let solanObstacleCounter = 0;
@@ -955,6 +997,106 @@ const canvas = document.getElementById("gameCanvas");
         return winterReady;
       }
 
+      // Thunder storm sound for winter scene rain effect
+      let thunderSound;
+      try {
+        thunderSound = new Howl({
+          src: ["thunder-storm.mp3"],
+          volume: 0.4, // Overlay volume - audible but not overpowering
+          loop: false, // Don't loop - will play for 6 seconds
+          autoplay: false,
+          html5: false, // Use Web Audio for better timing precision
+          pool: 1,
+          preload: true,
+          onload: function() {
+            console.log('✅ Thunder sound (thunder-storm.mp3) loaded successfully');
+            console.log('🎵 Thunder sound duration:', thunderSound.duration(), 'seconds');
+          },
+          onloaderror: function(id, error) { 
+            console.error('❌ Thunder sound failed to load:', error);
+          },
+          onplay: function() {
+            console.log('⛈️ Thunder sound started playing - volume 0.4');
+          },
+          onplayerror: function(id, error) { 
+            console.error('❌ Thunder sound failed to play:', error); 
+          },
+          onstop: function() {
+            console.log('⏹️ Thunder sound stopped');
+          },
+          onend: function() {
+            console.log('⛈️ Thunder sound ended naturally');
+          }
+        });
+      } catch (e) {
+        console.error('❌ Error creating thunder sound:', e);
+        thunderSound = {
+          play: () => console.warn('Thunder sound fallback - no audio'),
+          stop: () => {},
+          state: () => 'unloaded',
+          playing: () => false,
+          duration: () => 0
+        };
+      }
+
+      // Tempo-tempo sound for 10 points milestone
+      let tempoTempoSound;
+      try {
+        tempoTempoSound = new Howl({
+          src: ["tempo-tempo.mp3"],
+          volume: 1.0, // Maximum volume for clear audibility
+          loop: false, // Play only once
+          autoplay: false,
+          html5: false, // Use Web Audio for better timing precision
+          pool: 1,
+          preload: true,
+          onload: function() {
+            console.log('✅ Tempo-tempo sound (tempo-tempo.mp3) loaded successfully');
+            console.log('🎵 Tempo-tempo sound duration:', tempoTempoSound.duration(), 'seconds');
+          },
+          onloaderror: function(id, error) { 
+            console.error('❌ Tempo-tempo sound failed to load:', error);
+          },
+          onplay: function() {
+            console.log('🎵 Tempo-tempo sound started playing - volume 1.0');
+          },
+          onplayerror: function(id, error) { 
+            console.error('❌ Tempo-tempo sound failed to play:', error); 
+          },
+          onstop: function() {
+            console.log('⏹️ Tempo-tempo sound stopped');
+          },
+          onend: function() {
+            console.log('🎵 Tempo-tempo sound ended naturally');
+          }
+        });
+      } catch (e) {
+        console.error('❌ Error creating tempo-tempo sound:', e);
+        tempoTempoSound = {
+          play: () => console.warn('Tempo-tempo sound fallback - no audio'),
+          stop: () => {},
+          state: () => 'unloaded',
+          playing: () => false,
+          duration: () => 0
+        };
+      }
+
+      // Function to trigger tempo-tempo sound for 10-point milestone
+      function triggerTempoTempoSound() {
+        if (!tenPointsReachedThisCycle) {
+          tenPointsReachedThisCycle = true;
+          
+          if (tempoTempoSound && typeof tempoTempoSound.play === 'function') {
+            try {
+              tempoTempoSound.play();
+              console.log('🎵 Tempo-tempo sound triggered for 10 points milestone!');
+            } catch (e) {
+              console.error('❌ Failed to play tempo-tempo sound:', e);
+            }
+          }
+        }
+      }
+
       // Test sabotage sound function (for debugging)
       function testSabotageSound() {
         console.log('🧪 TESTING SABOTAGE SOUND');
@@ -1094,6 +1236,70 @@ const canvas = document.getElementById("gameCanvas");
       console.log('🏆 Initializing leaderboard...');
       initializeLeaderboard();
 
+      // Professional Cycle Progress Tracking System
+      function calculateCycleProgress() {
+        let progress = 0;
+        let currentScene = "Ready";
+        let stageIndex = 0;
+        
+        // Phase 1: Normal gameplay (0-33%)
+        if (!desertSceneActive && !winterSceneActive && !firstRadarCompleted) {
+          progress = Math.min(33, (gameTime / 30000) * 33); // 30 seconds to trigger desert
+          currentScene = "Normal";
+          stageIndex = 0;
+        }
+        // Phase 2: Desert scene (33-66%)
+        else if (desertSceneActive || (firstRadarCompleted && !winterSceneActive)) {
+          progress = 33 + Math.min(33, ((gameTime - 30000) / 20000) * 33); // 20 seconds for desert phase
+          currentScene = "Desert";
+          stageIndex = 1;
+        }
+        // Phase 3: Winter scene (66-100%)
+        else if (winterSceneActive || firstWinterCompleted) {
+          progress = 66 + Math.min(34, ((gameTime - 50000) / 15000) * 34); // 15 seconds for winter phase
+          currentScene = "Winter";
+          stageIndex = 2;
+        }
+        
+        return { 
+          progress: Math.min(100, progress), 
+          currentScene, 
+          stageIndex 
+        };
+      }
+      
+      function updateCycleProgressBar() {
+        if (!gameStarted || gameOver) return;
+        
+        // Verify progress bar elements are available
+        if (!cycleProgressContainer || !cycleProgressLabel || !cycleProgressFill) {
+          console.warn('⚠️ Cycle progress bar elements not found');
+          return;
+        }
+        
+        const { progress, currentScene, stageIndex } = calculateCycleProgress();
+        const cycleMaxSpeed = getCycleMaxSpeed(currentCycle);
+        
+        // Update progress bar elements
+        cycleProgressLabel.textContent = `Cycle ${currentCycle} Progress`;
+        cycleProgressPercent.textContent = `${Math.round(progress)}%`;
+        cycleProgressFill.style.width = `${progress}%`;
+        
+        // Update current scene text with speed info
+        const speedInfo = `Speed: ${currentSpeedMultiplier.toFixed(2)}x / ${cycleMaxSpeed}x max`;
+        cycleProgressText.textContent = `${currentScene} Scene - ${speedInfo}`;
+        
+        // Update stage indicators
+        progressStages.forEach((stage, index) => {
+          stage.classList.toggle('active', index === stageIndex);
+        });
+        
+        // Debug logging (can be removed later)
+        if (Math.random() < 0.005) { // Log occasionally to avoid spam
+          console.log(`🎮 Unified Scoreboard: ${Math.round(progress)}% | ${currentScene} | Speed: ${currentSpeedMultiplier.toFixed(2)}x`);
+        }
+      }
+
       // Device detection functions with clean responsive breakpoints
       function isTablet() {
         const width = window.innerWidth;
@@ -1225,6 +1431,9 @@ const canvas = document.getElementById("gameCanvas");
             countdownActive = false;
             gameStarted = true;
 
+            // Initialize professional cycle progress bar
+            updateCycleProgressBar();
+
             // Add game-active class to prevent touch interactions during gameplay
             document.body.classList.add("game-active");
 
@@ -1262,7 +1471,13 @@ const canvas = document.getElementById("gameCanvas");
       const BASE_PLAYER_SPEED = 700; // starting speed in pixels per second
       const SPEED_INCREASE_PER_POINT = 10; // pixels per second increase per point (aggressive difficulty scaling)
       const SPEED_INCREASE_PER_10_SECONDS = 8; // pixels per second increase every 10 seconds
-      const MAX_SPEED_MULTIPLIER = 8; // maximum speed (8x base speed for extreme challenge)
+      // Professional per-cycle max speed system (replacing static MAX_SPEED_MULTIPLIER)
+      function getCycleMaxSpeed(cycle) {
+        if (cycle <= CYCLE_MAX_SPEEDS.length) {
+          return CYCLE_MAX_SPEEDS[cycle - 1]; // Arrays are 0-indexed, cycles are 1-indexed
+        }
+        return CYCLE_MAX_SPEEDS[CYCLE_MAX_SPEEDS.length - 1]; // Use final speed for cycles 4+
+      }
       
       // Winter scene speed constants
       const WINTER_GAME_SPEED = 0.5; // Very slow game speed during winter
@@ -1282,30 +1497,40 @@ const canvas = document.getElementById("gameCanvas");
         
         const totalSpeedIncrease = pointSpeedIncrease + timeSpeedIncrease + extraSpeedBoost;
 
-        // Apply cycle speed multiplier to base speeds
-        const cycleBoostedTrackSpeed = BASE_TRACK_SPEED * cycleSpeedMultiplier;
-        const cycleBoostedPlayerSpeed = BASE_PLAYER_SPEED * cycleSpeedMultiplier;
+        // Professional gradual speed multiplier progression within cycle
+        const cycleMaxSpeed = getCycleMaxSpeed(currentCycle);
+        const progressionRate = 0.0001; // How fast multiplier increases per millisecond
+        const timeBonusMultiplier = gameTime * progressionRate;
+        const scoreBonusMultiplier = (score / 1000) * 0.1; // Small bonus per 1000 points
         
-        const maxTrackSpeed = cycleBoostedTrackSpeed * MAX_SPEED_MULTIPLIER;
-        const maxPlayerSpeed = cycleBoostedPlayerSpeed * MAX_SPEED_MULTIPLIER;
+        // Gradually increase speed multiplier toward cycle maximum
+        currentSpeedMultiplier = Math.min(
+          CYCLE_START_SPEED + timeBonusMultiplier + scoreBonusMultiplier,
+          cycleMaxSpeed
+        );
 
-        currentTrackSpeed = Math.min(
-          cycleBoostedTrackSpeed + totalSpeedIncrease,
-          maxTrackSpeed
-        );
-        currentPlayerSpeed = Math.min(
-          cycleBoostedPlayerSpeed + totalSpeedIncrease,
-          maxPlayerSpeed
-        );
+        // Professional controlled speed progression system (use already calculated cycleMaxSpeed)
+        const maxTrackSpeed = BASE_TRACK_SPEED * cycleMaxSpeed;
+        const maxPlayerSpeed = BASE_PLAYER_SPEED * cycleMaxSpeed;
+        
+        // Calculate target speed with improvements but cap at cycle maximum
+        const baseTrackSpeedWithMultiplier = BASE_TRACK_SPEED * currentSpeedMultiplier;
+        const targetTrackSpeed = baseTrackSpeedWithMultiplier + totalSpeedIncrease;
+        
+        currentTrackSpeed = Math.min(targetTrackSpeed, maxTrackSpeed);
+        const basePlayerSpeedWithMultiplier = BASE_PLAYER_SPEED * currentSpeedMultiplier;
+        const targetPlayerSpeed = basePlayerSpeedWithMultiplier + totalSpeedIncrease;
+        
+        currentPlayerSpeed = Math.min(targetPlayerSpeed, maxPlayerSpeed);
 
         // Update player object speeds
         player.speedX = currentPlayerSpeed;
         player.speedY = currentPlayerSpeed;
       }
 
-      // Dynamic speed variables (start with cycle-adjusted base speeds)
-      let currentTrackSpeed = BASE_TRACK_SPEED * cycleSpeedMultiplier;
-      let currentPlayerSpeed = BASE_PLAYER_SPEED * cycleSpeedMultiplier;
+      // Dynamic speed variables (start with controlled base speeds)
+      let currentTrackSpeed = BASE_TRACK_SPEED * currentSpeedMultiplier;
+      let currentPlayerSpeed = BASE_PLAYER_SPEED * currentSpeedMultiplier;
 
       // Il Tempo Gigante (player car) - initialized with mobile-friendly size
       const getPlayerDimensions = () => {
@@ -1730,8 +1955,8 @@ const canvas = document.getElementById("gameCanvas");
 
       // Helper function to spawn a single radar (used by multiple spawning systems)
       function spawnSingleRadar() {
-        const width = isMobile() ? 50 : 65;
-        const height = isMobile() ? 40 : 45;
+        const width = isMobile() ? 54 : 69; // Increased by 4px for better visibility
+        const height = isMobile() ? 44 : 49; // Increased by 4px for better visibility
         
         // Get current canvas display width
         const canvasDisplayWidth = canvas.getBoundingClientRect().width;
@@ -2240,6 +2465,17 @@ const canvas = document.getElementById("gameCanvas");
         winterFogActive = false;
         winterObstacleSpawnStartTime = 0;
         
+        // Reset rain effect variables
+        rainActive = false;
+        rainTriggered = false;
+        thunderActive = false;
+        rainTimer = 0;
+        thunderTimer = 0;
+        rainDrops.length = 0;
+        
+        // Reset sun effect variables
+        sunParticles.length = 0;
+        
         // Reset seasonal phase variables
         currentSeasonPhase = 'winter';
         lastWrenchCollectibleTime = 0;
@@ -2258,18 +2494,21 @@ const canvas = document.getElementById("gameCanvas");
         
         // Reset endless cycle system
         currentCycle = 1;
-        cycleSpeedMultiplier = 1.0;
+        currentSpeedMultiplier = CYCLE_START_SPEED; // Reset to controlled base speed
         cycleCompletionPending = false;
+        
+        // Reset tempo-tempo sound flag
+        tenPointsReachedThisCycle = false;
         
         // Reset side element pattern indices
         leftSidePatternIndex = 0; // Left side starts with mountain
         rightSidePatternIndex = 2; // Right side starts with tree (offset for opposite pattern)
 
-        // Reset speeds to base values (cycle multiplier is now 1.0)
-        currentTrackSpeed = BASE_TRACK_SPEED * cycleSpeedMultiplier;
-        currentPlayerSpeed = BASE_PLAYER_SPEED * cycleSpeedMultiplier;
-        player.speedX = BASE_PLAYER_SPEED * cycleSpeedMultiplier;
-        player.speedY = BASE_PLAYER_SPEED * cycleSpeedMultiplier;
+        // Reset speeds to base values with controlled progression
+        currentTrackSpeed = BASE_TRACK_SPEED * currentSpeedMultiplier;
+        currentPlayerSpeed = BASE_PLAYER_SPEED * currentSpeedMultiplier;
+        player.speedX = BASE_PLAYER_SPEED * currentSpeedMultiplier;
+        player.speedY = BASE_PLAYER_SPEED * currentSpeedMultiplier;
         gameOverDialog.style.display = "none"; // Hide the dialog on restart
         countdownOverlay.style.display = "none"; // Hide countdown overlay
 
@@ -2279,6 +2518,9 @@ const canvas = document.getElementById("gameCanvas");
 
         // Start game immediately without countdown when restarting
         gameStarted = true;
+        
+        // Initialize professional cycle progress bar for restart
+        updateCycleProgressBar();
 
         backgroundMusic.play();
 
@@ -2317,9 +2559,9 @@ const canvas = document.getElementById("gameCanvas");
       function restartCycle() {
         console.log(`🔄 Restarting game cycle ${currentCycle} → ${currentCycle + 1}`);
         
-        // Increment cycle and speed multiplier
+        // Increment cycle and maintain current speed (professional progression)
         currentCycle++;
-        cycleSpeedMultiplier *= cycleSpeedIncrease; // 1.8x speed increase
+        // Keep current speed instead of resetting to base speed for smooth progression
         
         // Reset all scene completion flags to restart sequence
         firstRadarCompleted = false;
@@ -2329,6 +2571,20 @@ const canvas = document.getElementById("gameCanvas");
         winterSceneActive = false;
         mistActive = false;
         radarActive = false;
+        
+        // Reset tempo-tempo sound flag for new cycle
+        tenPointsReachedThisCycle = false;
+        
+        // Reset rain effect variables
+        rainActive = false;
+        rainTriggered = false;
+        thunderActive = false;
+        rainTimer = 0;
+        thunderTimer = 0;
+        rainDrops.length = 0;
+        
+        // Reset sun effect variables
+        sunParticles.length = 0;
         
         // Reset scene timers
         desertSceneTimer = 0;
@@ -2362,16 +2618,20 @@ const canvas = document.getElementById("gameCanvas");
         lastWrenchCollectibleTime = 0;
         lastWinterSideObstacleTime = 0;
         
-        // Update speeds with new cycle multiplier  
-        const cycleBoostedTrackSpeed = BASE_TRACK_SPEED * cycleSpeedMultiplier;
-        const cycleBoostedPlayerSpeed = BASE_PLAYER_SPEED * cycleSpeedMultiplier;
-        currentTrackSpeed = cycleBoostedTrackSpeed;
-        currentPlayerSpeed = cycleBoostedPlayerSpeed;
-        player.speedX = cycleBoostedPlayerSpeed;
-        player.speedY = cycleBoostedPlayerSpeed;
+        // Update speeds with new controlled progression system
+        const baseTrackSpeed = BASE_TRACK_SPEED * currentSpeedMultiplier;
+        const basePlayerSpeed = BASE_PLAYER_SPEED * currentSpeedMultiplier;
+        currentTrackSpeed = baseTrackSpeed;
+        currentPlayerSpeed = basePlayerSpeed;
+        player.speedX = basePlayerSpeed;
+        player.speedY = basePlayerSpeed;
         
-        // Reset cycle completion flag
+        // Reset cycle completion flag and ensure clean state
         cycleCompletionPending = false;
+        
+        // Reset scene state flags (additional safeguard)
+        preWinterWarningActive = false;
+        preWinterWarningTimer = 0;
         
         // Reset misc variables
         missedRadarAttempts = 0;
@@ -2384,7 +2644,12 @@ const canvas = document.getElementById("gameCanvas");
         timeBonusMessageTimer = 0;
         
         // Keep score and game time to maintain progression
-        console.log(`✅ Cycle ${currentCycle} started at ${cycleSpeedMultiplier.toFixed(1)}x base speed (Score: ${score})`);
+        const cycleMaxSpeed = getCycleMaxSpeed(currentCycle);
+        console.log(`✅ Cycle ${currentCycle} started! Max speed: ${cycleMaxSpeed}x | Current: ${currentSpeedMultiplier}x (Score: ${score})`);
+        console.log(`🔄 Scene flags reset: firstRadarCompleted=${firstRadarCompleted}, firstWinterCompleted=${firstWinterCompleted}`);
+        
+        // Reset professional cycle progress bar for new cycle
+        updateCycleProgressBar();
       }
 
       // Game over elements
@@ -2459,8 +2724,18 @@ const canvas = document.getElementById("gameCanvas");
               winterSound.stop();
               console.log('Stopped winter sound - game over');
             }
+            // Stop thunder sound if playing
+            if (thunderSound && typeof thunderSound.stop === 'function') {
+              thunderSound.stop();
+              console.log('Stopped thunder sound - game over');
+            }
+            // Stop tempo-tempo sound if playing
+            if (tempoTempoSound && typeof tempoTempoSound.stop === 'function') {
+              tempoTempoSound.stop();
+              console.log('Stopped tempo-tempo sound - game over');
+            }
           } catch (e) {
-            console.warn('Error stopping winter sound on game over:', e);
+            console.warn('Error stopping winter/thunder/tempo-tempo sound on game over:', e);
           }
 
           // Remove game-active and mist-active classes, add game-over class
@@ -2494,6 +2769,11 @@ const canvas = document.getElementById("gameCanvas");
         if (timeBonusActive && gameTime - lastTimeBonusAwarded >= timeBonusInterval) {
           score += timeBonusPoints;
           lastTimeBonusAwarded = gameTime; // Reset timer for next bonus
+          
+          // Check for 10-point milestone
+          if (score >= 10) {
+            triggerTempoTempoSound();
+          }
           
           // Show time bonus message
           showTimeBonusMessage = true;
@@ -2768,6 +3048,11 @@ const canvas = document.getElementById("gameCanvas");
               
               score += points;
               
+              // Check for 10-point milestone
+              if (score >= 10) {
+                triggerTempoTempoSound();
+              }
+              
               // Trigger score animation
               scoreDisplay.classList.add("score-animate");
               scoreImage.classList.add("point-animate");
@@ -2877,8 +3162,8 @@ const canvas = document.getElementById("gameCanvas");
           }
         }
         
-        // Trigger mist if conditions are met and not already active or in desert
-        if (shouldTriggerMist && !mistActive && !desertSceneActive) {
+        // Trigger mist if conditions are met and not already active or in desert/winter
+        if (shouldTriggerMist && !mistActive && !desertSceneActive && !winterSceneActive) {
           mistActive = true;
           mistTimer = mistDuration;
           radarSpawnedThisMist = false; // Reset radar spawn flag for new mist
@@ -3169,6 +3454,7 @@ const canvas = document.getElementById("gameCanvas");
           
           if (desertSceneTimer <= 0) {
             desertSceneActive = false;
+            console.log(`🏜️ Desert scene completed (Cycle: ${currentCycle}, Score: ${score})`);
             
             // Enable time-based mist system after first desert scene completion
             if (!mistTimeBased) {
@@ -3261,20 +3547,19 @@ const canvas = document.getElementById("gameCanvas");
           // Primary trigger: after desert scene completion AND not in mist/radar
           if (firstRadarCompleted && !mistActive && !radarActive && !desertSceneActive) {
             shouldTriggerWinter = true;
-            console.log('❄️ Winter scene trigger - Primary: after desert completion, no mist/radar active');
+            console.log(`❄️ Winter scene trigger - Primary: after desert completion, no mist/radar active (Cycle: ${currentCycle}, Score: ${score})`);
           }
           
           // Alternative trigger: 36 seconds + 180 points
           if (gameTime >= 36000 && score >= 180) { // 36 seconds = 36000ms
             shouldTriggerWinter = true;
-            console.log('❄️ Winter scene trigger - Alternative: 36 seconds + 180 points reached');
+            console.log(`❄️ Winter scene trigger - Alternative: 36 seconds + 180 points reached (Cycle: ${currentCycle}, Time: ${Math.floor(gameTime / 1000)}s)`);
           }
           
           if (shouldTriggerWinter) {
             // Start pre-winter warning (2-second speed decrease before winter scene)
             preWinterWarningActive = true;
             preWinterWarningTimer = preWinterWarningDuration; // 2 seconds countdown
-            firstWinterCompleted = true; // Mark as completed to prevent future triggers
             
             // Store current speeds for gradual decrease during warning period
             preWinterOriginalPlayerSpeed = currentPlayerSpeed;
@@ -3368,6 +3653,51 @@ const canvas = document.getElementById("gameCanvas");
         if (winterSceneActive) {
           winterSceneTimer -= deltaTime;
           
+          // Trigger rain and thunder effect 1.5 seconds after winter scene starts
+          const timeElapsedInWinter = (winterSceneDuration + winterVisualDelay) - winterSceneTimer;
+          if (!rainTriggered && timeElapsedInWinter >= rainTriggerDelay) {
+            rainTriggered = true;
+            rainActive = true;
+            thunderActive = true;
+            rainTimer = rainDuration;
+            thunderTimer = thunderDuration;
+            
+            // Start thunder sound
+            if (thunderSound && typeof thunderSound.play === 'function') {
+              try {
+                thunderSound.play();
+                console.log('⛈️ Thunder storm started - rain effect active');
+              } catch (e) {
+                console.error('❌ Failed to play thunder sound:', e);
+              }
+            }
+          }
+          
+          // Update rain timer and stop rain after 3 seconds
+          if (rainActive && rainTimer > 0) {
+            rainTimer -= deltaTime;
+            if (rainTimer <= 0) {
+              rainActive = false;
+              console.log('🌧️ Rain stopped after 3 seconds - thunder continues');
+            }
+          }
+          
+          // Update thunder timer and stop thunder after 6 seconds
+          if (thunderActive && thunderTimer > 0) {
+            thunderTimer -= deltaTime;
+            if (thunderTimer <= 0) {
+              thunderActive = false;
+              if (thunderSound && typeof thunderSound.stop === 'function') {
+                try {
+                  thunderSound.stop();
+                  console.log('⛈️ Thunder storm stopped completely');
+                } catch (e) {
+                  console.error('❌ Failed to stop thunder sound:', e);
+                }
+              }
+            }
+          }
+          
           // Activate winter visual effects after 5-second delay
           if (!winterFogActive && winterSceneTimer <= winterSceneDuration) {
             winterFogActive = true; // Activate fog and visual effects after delay
@@ -3399,6 +3729,27 @@ const canvas = document.getElementById("gameCanvas");
             winterObstacles.length = 0;
             winterSideObstacles.length = 0;
             
+            // Clean up rain effect
+            rainActive = false;
+            rainTriggered = false;
+            thunderActive = false;
+            rainTimer = 0;
+            thunderTimer = 0;
+            rainDrops.length = 0;
+            
+            // Clean up sun effect
+            sunParticles.length = 0;
+            
+            // Stop thunder sound if still playing
+            if (thunderSound && typeof thunderSound.stop === 'function') {
+              try {
+                thunderSound.stop();
+                console.log('⛈️ Thunder storm stopped - winter scene ended');
+              } catch (e) {
+                console.error('❌ Failed to stop thunder sound on winter end:', e);
+              }
+            }
+            
             // Keep current speeds that have naturally progressed during winter scene
             // Don't restore pre-winter speeds - let natural progression continue
             player.speedX = currentPlayerSpeed;
@@ -3406,10 +3757,35 @@ const canvas = document.getElementById("gameCanvas");
             
             console.log('❄️ Winter scene ended - speeds continue natural progression from winter levels');
             
+            // Mark winter scene as completed to prevent future triggers in this cycle
+            firstWinterCompleted = true;
+            
             // Check for cycle completion (winter scene is the last scene in sequence)
-            if (!cycleCompletionPending) {
+            if (!cycleCompletionPending && firstWinterCompleted) {
               cycleCompletionPending = true;
-              console.log(`🔄 Cycle ${currentCycle} completed! Starting cycle ${currentCycle + 1} at ${(cycleSpeedMultiplier * cycleSpeedIncrease).toFixed(1)}x speed`);
+              
+              // Award 50-point cycle completion bonus
+              score += 50;
+              
+              // Check for 10-point milestone
+              if (score >= 10) {
+                triggerTempoTempoSound();
+              }
+              
+              // Trigger score animation for cycle bonus
+              scoreDisplay.classList.add("score-animate");
+              scoreImage.classList.add("point-animate");
+              
+              // Remove animation classes after animation completes
+              setTimeout(() => {
+                scoreDisplay.classList.remove("score-animate");
+                scoreImage.classList.remove("point-animate");
+              }, 500);
+              
+              const nextCycleMaxSpeed = getCycleMaxSpeed(currentCycle + 1);
+              console.log(`🔄 Cycle ${currentCycle} completed! Starting cycle ${currentCycle + 1} with max speed ${nextCycleMaxSpeed}x`);
+              console.log(`💰 Cycle completion bonus: +50 points! Total score: ${score}`);
+              console.log(`📊 Cycle ${currentCycle} stats - Score: ${score}, Game Time: ${Math.floor(gameTime / 1000)}s`);
               
               // Delay cycle restart to avoid immediate transition
               setTimeout(() => {
@@ -3912,11 +4288,138 @@ const canvas = document.getElementById("gameCanvas");
         speedIndicator.textContent = `Speed: ${speedMultiplier}x`;
         cycleIndicator.textContent = `Cycle: ${currentCycle}`;
         fpsCounter.textContent = `FPS: ${currentFps}`;
+        
+        // Update professional cycle progress bar
+        updateCycleProgressBar();
+
+        // Update rain particles
+        updateRain(deltaTime);
+        
+        // Update sun particles
+        updateSun(deltaTime);
 
         // Draw everything
         draw();
 
         requestAnimationFrame(update);
+      }
+
+      // Update rain particles for winter scene
+      function updateRain(deltaTime) {
+        if (!rainActive) return;
+        
+        const now = Date.now();
+        
+        // Spawn new rain drops
+        if (now - lastRainSpawnTime > rainSpawnRate && rainDrops.length < maxRainDrops) {
+          const canvasDisplayWidth = canvas.getBoundingClientRect().width;
+          const canvasDisplayHeight = canvas.getBoundingClientRect().height;
+          
+          // Create new rain drop
+          rainDrops.push({
+            x: Math.random() * canvasDisplayWidth,
+            y: -10,
+            speed: 300 + Math.random() * 200, // Random speed between 300-500px/s
+            length: 15 + Math.random() * 10, // Random length between 15-25px
+            opacity: 0.6 + Math.random() * 0.4 // Random opacity between 0.6-1.0
+          });
+          
+          lastRainSpawnTime = now;
+        }
+        
+        // Update existing rain drops
+        for (let i = rainDrops.length - 1; i >= 0; i--) {
+          const drop = rainDrops[i];
+          drop.y += drop.speed * (deltaTime / 1000);
+          
+          // Remove drops that have fallen off screen
+          if (drop.y > canvas.getBoundingClientRect().height + 20) {
+            rainDrops.splice(i, 1);
+          }
+        }
+      }
+
+      // Draw rain effect
+      function drawRain() {
+        if (!rainActive || rainDrops.length === 0) return;
+        
+        ctx.save();
+        ctx.strokeStyle = '#87CEEB'; // Sky blue color for rain
+        ctx.lineWidth = 2;
+        
+        rainDrops.forEach(drop => {
+          ctx.globalAlpha = drop.opacity;
+          ctx.beginPath();
+          ctx.moveTo(drop.x, drop.y);
+          ctx.lineTo(drop.x, drop.y + drop.length);
+          ctx.stroke();
+        });
+        
+        ctx.restore();
+      }
+
+      // Update sun particles for summer phase
+      function updateSun(deltaTime) {
+        if (!(winterSceneActive && currentSeasonPhase === 'summer')) return;
+        
+        const now = Date.now();
+        
+        // Spawn new sun particles
+        if (now - lastSunSpawnTime > sunSpawnRate && sunParticles.length < maxSunParticles) {
+          const canvasDisplayWidth = canvas.getBoundingClientRect().width;
+          const canvasDisplayHeight = canvas.getBoundingClientRect().height;
+          
+          // Create new sun particle (gentle floating motion)
+          sunParticles.push({
+            x: Math.random() * canvasDisplayWidth,
+            y: canvasDisplayHeight + 10, // Start from bottom
+            speedX: (Math.random() - 0.5) * 50, // Slight horizontal drift
+            speedY: -80 - Math.random() * 40, // Float upward
+            size: 3 + Math.random() * 4, // Random size between 3-7px
+            opacity: 0.6 + Math.random() * 0.4, // Random opacity between 0.6-1.0
+            life: 1.0, // Life starts at 1.0 and decreases
+            decay: 0.01 + Math.random() * 0.01 // Random decay rate
+          });
+          
+          lastSunSpawnTime = now;
+        }
+        
+        // Update existing sun particles
+        for (let i = sunParticles.length - 1; i >= 0; i--) {
+          const particle = sunParticles[i];
+          particle.x += particle.speedX * (deltaTime / 1000);
+          particle.y += particle.speedY * (deltaTime / 1000);
+          particle.life -= particle.decay;
+          
+          // Remove particles that have faded out or moved off screen
+          if (particle.life <= 0 || particle.y < -20) {
+            sunParticles.splice(i, 1);
+          }
+        }
+      }
+
+      // Draw sun effect
+      function drawSun() {
+        if (!(winterSceneActive && currentSeasonPhase === 'summer') || sunParticles.length === 0) return;
+        
+        ctx.save();
+        
+        sunParticles.forEach(particle => {
+          const gradient = ctx.createRadialGradient(
+            particle.x, particle.y, 0,
+            particle.x, particle.y, particle.size
+          );
+          gradient.addColorStop(0, `rgba(255, 223, 0, ${particle.opacity * particle.life})`); // Golden center
+          gradient.addColorStop(1, `rgba(255, 165, 0, ${particle.opacity * particle.life * 0.3})`); // Orange edge
+          
+          ctx.globalAlpha = particle.life;
+          ctx.fillStyle = gradient;
+          ctx.beginPath();
+          ctx.arc(particle.x, particle.y, particle.size, 0, 2 * Math.PI);
+          ctx.fill();
+        });
+        
+        ctx.restore();
       }
 
       // Draw game elements
@@ -4985,6 +5488,16 @@ const canvas = document.getElementById("gameCanvas");
           ctx.globalAlpha = 1.0;
         }
 
+        // Draw rain effect during winter scene
+        if (winterSceneActive) {
+          drawRain();
+        }
+
+        // Draw sun effect during summer phase of winter scene
+        if (winterSceneActive && currentSeasonPhase === 'summer') {
+          drawSun();
+        }
+
         // Draw winter fog overlay if active (lighter fog without dirty tricks)
         if (winterFogActive && winterSceneActive) {
           // Calculate winter fog opacity (lighter than mist)
@@ -5336,8 +5849,9 @@ const canvas = document.getElementById("gameCanvas");
         radarSound.stop();
         try {
           sabotageSound.stop();
+          tempoTempoSound.stop();
         } catch (e) {
-          console.warn('Error stopping sabotage sound:', e);
+          console.warn('Error stopping sabotage/tempo-tempo sound:', e);
         }
         
         // Reset to step 1 of car selection

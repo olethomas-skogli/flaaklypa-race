@@ -106,14 +106,91 @@ canvas {
       #gameOverDialog #backButton {
         display: block !important;
       }
+      /* Unified Scoreboard Container - Column Layout */
       #scoreContainer {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        width: 100%;
+        max-width: 800px;
+        margin: 0 auto;
+        background-color: rgba(0, 0, 0, 0.8);
+        border: 1px solid rgba(255, 215, 0, 0.4);
+        border-radius: 10px;
+        backdrop-filter: blur(5px);
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+        padding: 10px;
+      }
+
+      /* Top Row: Traditional Score Elements */
+      #scoreTopRow {
         display: flex;
         flex-direction: row;
         align-items: center;
         justify-content: center;
         width: 100%;
-        max-width: 800px;
+        margin-bottom: 8px;
       }
+
+      /* Integrated Cycle Progress Bar (Bottom Row) */
+      #cycleProgressContainer {
+        width: 100%;
+        padding: 8px 0 0 0;
+        margin: 0;
+        background: none;
+        border: none;
+        border-radius: 0;
+        backdrop-filter: none;
+        box-shadow: none;
+        border-top: 1px solid rgba(255, 215, 0, 0.2);
+        display: none; /* Hidden by default, shown during gameplay */
+      }
+
+      /* Show progress bar during active gameplay */
+      body.game-active #cycleProgressContainer {
+        display: block;
+      }
+
+      /* Mobile-responsive unified scoreboard adjustments */
+      @media screen and (max-width: 768px) {
+        #scoreContainer {
+          margin: 5px 10px;
+          padding: 8px;
+          font-size: 14px;
+        }
+        
+        #scoreTopRow {
+          margin-bottom: 6px;
+        }
+        
+        #cycleProgressContainer {
+          padding: 6px 0 0 0;
+          font-size: 12px;
+        }
+        
+        #cycleProgressLabel {
+          font-size: 12px;
+        }
+        
+        #cycleProgressPercent {
+          font-size: 11px;
+        }
+        
+        .progress-stage {
+          font-size: 9px;
+          padding: 1px 3px;
+        }
+        
+        #cycleProgressText {
+          font-size: 10px;
+        }
+        
+        #cycleProgressBar {
+          height: 16px;
+        }
+      }
+
       #gameOverDialog {
         display: none; /* Initially hidden */
         position: absolute;
@@ -282,6 +359,86 @@ canvas {
         text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.8);
         font-weight: 600;
       }
+
+
+      #cycleProgressHeader {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 8px;
+      }
+
+      #cycleProgressLabel {
+        font-size: 14px;
+        font-weight: bold;
+        color: #FFD700;
+        text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.8);
+      }
+
+      #cycleProgressPercent {
+        font-size: 12px;
+        color: #FFFFFF;
+        text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.8);
+      }
+
+      #cycleProgressBar {
+        position: relative;
+        width: 100%;
+        height: 20px;
+        background-color: rgba(255, 255, 255, 0.1);
+        border: 1px solid rgba(255, 215, 0, 0.3);
+        border-radius: 10px;
+        overflow: hidden;
+      }
+
+      #cycleProgressFill {
+        height: 100%;
+        background: linear-gradient(90deg, 
+          #FFD700 0%, 
+          #FFA500 50%, 
+          #FF6B35 100%);
+        border-radius: 10px;
+        transition: width 0.3s ease;
+        width: 0%;
+        box-shadow: 0 0 10px rgba(255, 215, 0, 0.5);
+      }
+
+      #cycleProgressStages {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        pointer-events: none;
+      }
+
+      .progress-stage {
+        font-size: 10px;
+        color: #FFFFFF;
+        text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.9);
+        font-weight: bold;
+        padding: 2px 4px;
+        background-color: rgba(0, 0, 0, 0.5);
+        border-radius: 3px;
+        margin: 0 2px;
+      }
+
+      .progress-stage.active {
+        background-color: rgba(255, 215, 0, 0.3);
+        border: 1px solid #FFD700;
+      }
+
+      #cycleProgressText {
+        font-size: 12px;
+        color: #CCCCCC;
+        text-align: center;
+        margin-top: 6px;
+        text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.8);
+      }
+
       #gameOverImage {
         width: clamp(100px, 20vw, 150px); /* Responsive image width for row layout */
         height: auto;
@@ -602,23 +759,31 @@ canvas {
           flex-shrink: 0;
         }
         
-        /* Desktop scoreboard always on top */
+        /* Desktop unified scoreboard - maintain column layout */
         body.game-active #scoreContainer {
           position: static;
           display: flex;
-          flex-direction: row;
+          flex-direction: column;
           align-items: center;
           justify-content: center;
           background: rgba(0, 0, 0, 0.9);
           padding: 12px 24px;
           border-radius: 25px;
           backdrop-filter: blur(10px);
-          border: 1px solid rgba(255, 255, 255, 0.2);
+          border: 1px solid rgba(255, 215, 0, 0.4);
           box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
-          gap: 15px;
           margin: 0 auto 20px auto;
           width: fit-content;
+          min-width: 500px;
           order: -1; /* After logo but before canvas */
+        }
+        
+        /* Desktop scoreTopRow styling */
+        body.game-active #scoreTopRow {
+          display: flex;
+          flex-direction: row;
+          gap: 15px;
+          margin-bottom: 8px;
         }
         
         body.game-active #scoreContainer img {
@@ -672,18 +837,26 @@ canvas {
         body.game-over #scoreContainer {
           position: static;
           display: flex;
-          flex-direction: row;
+          flex-direction: column;
           align-items: center;
           justify-content: center;
           background: rgba(0, 0, 0, 0.9);
           padding: 12px 24px;
           border-radius: 25px;
           backdrop-filter: blur(10px);
-          border: 1px solid rgba(255, 255, 255, 0.2);
+          border: 1px solid rgba(255, 215, 0, 0.4);
           box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
-          gap: 15px;
           margin: 0 auto 20px auto;
           width: fit-content;
+          min-width: 500px;
+        }
+        
+        /* Game-over scoreTopRow styling */
+        body.game-over #scoreTopRow {
+          display: flex;
+          flex-direction: row;
+          gap: 15px;
+          margin-bottom: 8px;
         }
         
         body.game-over #scoreContainer img {
